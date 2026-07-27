@@ -341,7 +341,7 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
         <div className="panel-title">
           <div>
             <h2>평가 대상자 리스트</h2>
-            <p>등록된 직원 목록에서 대상을 선택해 평가를 진행합니다.</p>
+            <p>시험 채점이 완료(합격/불합격 확정)되면 응시자가 이 목록에 자동으로 등록됩니다. 대상을 선택해 평가를 진행하세요.</p>
           </div>
           <span className="badge gray">{filtered.length ? `${filtered.length}명 · ${cur}/${pages} 페이지` : "0명"}</span>
         </div>
@@ -357,7 +357,7 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
             <option value="pending">입력 진행 중</option>
           </select>
           <button className="btn ghost" onClick={openStaffModal}>스태프에서 추가</button>
-          <button className="btn ghost" onClick={importFromExam}>시험 응시자 불러오기</button>
+          <button className="btn ghost" onClick={importFromExam}>미채점 응시자 불러오기</button>
           <button className="btn ghost" onClick={addEmployee}>직접 추가</button>
           <button className="btn danger" onClick={onDeleteAll}>전체 삭제</button>
         </div>
@@ -979,7 +979,7 @@ function SettingsTab({ emp, saveEmployee, onDelete, onDeleteAll, count }) {
         </div>
         <div className="info-box" style={{ marginTop: 15 }}>
           <strong>권장 운영 순서</strong><br />
-          ⓪ 대상자 등록(스태프에서 추가 또는 시험 응시자 불러오기) → ① 인사카드 평가 입력 → ② 매출 자동 산정 → ③ 역량평가 동기화 → ④ 종합 의견 작성 및 인쇄
+          ⓪ 대상자 등록(<b>시험 채점 완료 시 자동 등록</b>, 필요 시 스태프에서 추가) → ① 인사카드 평가 입력 → ② 매출 자동 산정 → ③ 역량평가 동기화 → ④ 종합 의견 작성 및 인쇄
         </div>
         <div className="status-box" style={{ marginTop: 15 }}>
           <b>평가 데이터 삭제</b>

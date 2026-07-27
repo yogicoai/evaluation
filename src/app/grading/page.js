@@ -339,11 +339,16 @@ function SubmissionDetail({ record, answerKey, questions, onSaved }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ manualScore: val, evaluatorMemo: memo, evaluatorName: evalName })
     });
+    const d = await res.json().catch(() => ({}));
     if (res.ok) {
-      alert("저장되었습니다.");
+      // 채점이 확정되면 서버가 종합평가 대상자로 자동 등록한다.
+      alert(
+        d.sync?.created
+          ? `저장되었습니다.\n${d.sync.name} 님이 수습 종합평가 대상자로 자동 등록되었습니다.`
+          : "저장되었습니다."
+      );
       onSaved();
     } else {
-      const d = await res.json();
       alert(d.error || "저장 실패");
     }
   }

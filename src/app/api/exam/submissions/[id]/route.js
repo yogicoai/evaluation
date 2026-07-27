@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb, COLLECTIONS } from "@/lib/mongodb";
 import { requireEvaluator } from "@/lib/auth";
+import { syncSubmissionToEmployee } from "@/lib/evaluationSync";
 
 // 평가자: 채점/메모/자동채점 수정값 저장
 export async function PATCH(req, { params }) {
@@ -37,13 +38,24 @@ export async function PATCH(req, { params }) {
   }
 
   const db = await getDb();
-  const result = await db
-    .collection(COLLECTIONS.submissions)
-    .updateOne({ submissionId: id }, { $set: set });
+  const col = db.collection(COLLECTIONS.submissions);
+  const result = await col.updateOne({ submissionId: id }, { $set: set });
   if (!result.matchedCount) {
     return NextResponse.json({ error: "응시 정보를 찾을 수 없습니다." }, { status: 404 });
   }
-  return NextResponse.json({ ok: true });
+
+  // 서술형 채점이 입력되어 합격/불합격이 확정되면 종합평가 대상자로 자동 등록한다.
+  let sync = null;
+  if ("manualScore" in body && set.manualScore !== null) {
+    try {
+      const submission = await col.findOne({ submissionId: id }, { projection: { _id: 0 } });
+      sync = await syncSubmissionToEmployee(submission);
+    } catch (e) {
+      // 자동 등록 실패가 채점 저장 자체를 막지 않도록 한다.
+      console.error("종합평가 대상자 자동 등록 실패:", e);
+    }
+  }
+  return NextResponse.json({ ok: true, sync });
 }
 
 // 평가자: 응시 데이터 삭제 (재응시 허용 목적)
