@@ -535,10 +535,8 @@ function HrTab({ emp, saveEmployee, openCriteria }) {
 function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [autoBusy, setAutoBusy] = useState(false);
-  const [start, setStart] = useState(() => {
-    const d = new Date();
-    return toDateInput(new Date(d.getFullYear(), d.getMonth() - 1, 1));
-  });
+  // 기본 산정 기간 = 올해 1월 1일 ~ 오늘 (예: 2026년이면 2026-01-01 ~ 오늘)
+  const [start, setStart] = useState(() => toDateInput(new Date(new Date().getFullYear(), 0, 1)));
   const [end, setEnd] = useState(() => toDateInput(new Date()));
 
   if (!emp) return <section className="card"><div className="empty-state">평가 대상자를 먼저 선택해 주세요.</div></section>;
@@ -838,16 +836,16 @@ function PersonalTable({ rows, highlightName }) {
 }
 
 function CompetencyTab({ emp, exams, answerKey, saveEmployee, syncCompetency }) {
-  const [override, setOverride] = useState(emp?.competency?.override ?? "");
   const [memo, setMemo] = useState(emp?.competency?.memo || "");
   useEffect(() => {
-    setOverride(emp?.competency?.override ?? "");
     setMemo(emp?.competency?.memo || "");
   }, [emp?.id]);
 
   if (!emp) return <section className="card"><div className="empty-state">평가 대상자를 먼저 선택해 주세요.</div></section>;
 
   const r = calculateCompetency(emp, exams, answerKey);
+  const ov = emp.competency?.override;
+  const hasOverride = ov !== "" && ov !== null && typeof ov !== "undefined";
 
   return (
     <div className="dashboard-grid">
@@ -855,25 +853,40 @@ function CompetencyTab({ emp, exams, answerKey, saveEmployee, syncCompetency }) 
         <div className="panel-title">
           <div>
             <h2>3. 역량평가 연동</h2>
-            <p>역량평가 시험 결과를 불러와 100점 기준의 30점으로 환산합니다.</p>
+            <p>역량평가 시험 결과가 자동으로 반영됩니다. (100점 기준 → 30점 환산)</p>
           </div>
-          <button className="btn ghost" onClick={() => syncCompetency(emp)}>선택 직원 동기화</button>
+          <button className="btn ghost" onClick={() => syncCompetency(emp)}>시험 결과 다시 연결</button>
         </div>
         <div style={{ padding: 16, border: "1px solid var(--line)", borderRadius: 17, background: "#fff" }}>
           <div style={{ fontSize: 12, fontWeight: 850, color: "var(--muted)" }}>연동된 역량평가 점수</div>
           <div><span className="scorebig" style={{ color: "#1e3a8a" }}>{fmtNum(r.raw, 0)}</span><span style={{ fontSize: 16, fontWeight: 850, color: "#64748b" }}> / 100</span></div>
           <p className="subtle" style={{ marginTop: 7 }}>
             {r.matched
-              ? <>연동 응시자: <b>{r.matched.name}</b> · {r.matched.store || "소속 미입력"} · 시험 제출 {fmtDate(r.matched.submittedAt)} · 자동 계산 {fmtNum(r.linked, 0)}점{r.source === "수동 반영" ? " · 현재 수동 점수 적용" : ""}</>
-              : r.source === "수동 반영" ? "수동 입력 점수를 사용 중입니다." : "동기화된 시험 결과가 없습니다. 점수를 직접 입력하거나 시험 응시 후 동기화해 주세요."}
+              ? <>연동 응시자: <b>{r.matched.name}</b> · {r.matched.store || "소속 미입력"} · 시험 제출 {fmtDate(r.matched.submittedAt)} · 시험 점수 {fmtNum(r.linked, 0)}점</>
+              : "연결된 시험 결과가 없습니다. 해당 직원이 시험에 응시하고 채점이 완료되면 자동으로 반영됩니다."}
           </p>
         </div>
+
+        {/* 과거에 수동 점수를 넣어 둔 데이터만 여기서 해제할 수 있게 한다.
+            역량평가 점수는 시험 결과로만 산정하므로 새로 입력하는 경로는 두지 않는다. */}
+        {hasOverride && (
+          <div className="info-box" style={{ marginTop: 14 }}>
+            <strong>수동 점수 {fmtNum(Number(emp.competency.override), 0)}점이 적용 중입니다.</strong><br />
+            시험 결과 대신 수동 입력값이 반영되고 있습니다. 시험 점수로 되돌리려면 아래 버튼을 눌러 주세요.
+            <div style={{ marginTop: 10 }}>
+              <button
+                className="btn ghost"
+                onClick={() => saveEmployee(emp.id, { competency: { ...(emp.competency || {}), override: "" } }, { silent: false })}
+              >
+                시험 점수로 되돌리기
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="form-grid" style={{ marginTop: 14 }}>
-          <label className="field"><span>역량평가 수동 점수</span>
-            <input
-              type="number" min={0} max={100} placeholder="연동값 사용 시 비움" value={override}
-              onChange={(e) => setOverride(e.target.value)}
-            />
+          <label className="field"><span>시험 점수 (100점 기준)</span>
+            <input readOnly value={`${fmtNum(r.raw, 0)} / 100`} />
           </label>
           <label className="field"><span>가중 반영 점수</span>
             <input readOnly value={`${fmtNum(r.weighted, 1)} / 30`} />
@@ -885,17 +898,9 @@ function CompetencyTab({ emp, exams, answerKey, saveEmployee, syncCompetency }) 
         <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
           <button
             className="btn primary"
-            onClick={() =>
-              saveEmployee(emp.id, {
-                competency: {
-                  ...(emp.competency || {}),
-                  override: override === "" ? "" : Number(override),
-                  memo
-                }
-              }, { silent: false })
-            }
+            onClick={() => saveEmployee(emp.id, { competency: { ...(emp.competency || {}), memo } }, { silent: false })}
           >
-            역량평가 반영 저장
+            메모 저장
           </button>
         </div>
       </section>

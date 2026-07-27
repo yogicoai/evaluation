@@ -25,6 +25,7 @@ export default function ExamPage() {
   const [saveState, setSaveState] = useState("대기 중");
   const [doneMeta, setDoneMeta] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [redirectIn, setRedirectIn] = useState(0); // 제출 완료 후 처음 화면 복귀까지 남은 초
 
   // ── 스태프 연동 로그인 ──
   const [stores, setStores] = useState(null); // null=로딩, []=실패(직접입력)
@@ -35,8 +36,34 @@ export default function ExamPage() {
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const lockedRef = useRef(false);
+  const redirectTimerRef = useRef(null);
   const answersRef = useRef({});
   answersRef.current = answers;
+
+  // 제출 완료 화면에서 처음 화면(응시자 정보 입력)으로 되돌린다.
+  // 다음 직원이 같은 기기에서 바로 이어 응시할 수 있도록 이전 응시자 정보는 모두 비운다.
+  function resetToStart() {
+    clearInterval(redirectTimerRef.current);
+    clearInterval(timerRef.current);
+    lockedRef.current = false;
+    startedAtRef.current = null;
+    setRedirectIn(0);
+    setScreen("start");
+    setStore(""); setName(""); setRole("");
+    setStoreSel(""); setNameSel(""); setMembers([]);
+    setQuestions([]); setAnswers({});
+    setRemain(EXAM_MINUTES * 60);
+    setSaveState("대기 중");
+    setDoneMeta(""); setLockedMsg("");
+    setSubmitting(false);
+    window.scrollTo({ top: 0 });
+  }
+
+  // 언마운트 시 타이머 정리
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    clearInterval(redirectTimerRef.current);
+  }, []);
 
   useEffect(() => {
     fetch("/api/staff/stores")
@@ -162,6 +189,19 @@ export default function ExamPage() {
       }
       setScreen("done");
       setSaveState("제출 완료");
+      // 3초간 완료 안내를 보여준 뒤 처음 화면으로 되돌린다.
+      setRedirectIn(3);
+      clearInterval(redirectTimerRef.current);
+      redirectTimerRef.current = setInterval(() => {
+        setRedirectIn((v) => {
+          if (v <= 1) {
+            clearInterval(redirectTimerRef.current);
+            resetToStart();
+            return 0;
+          }
+          return v - 1;
+        });
+      }, 1000);
     } catch (e) {
       lockedRef.current = false;
       setSubmitting(false);
@@ -322,6 +362,14 @@ export default function ExamPage() {
               <p>응시 결과는 평가자 확인 후 내부 기준에 따라 반영됩니다.<br />제출 완료 후 답안 및 점수는 조회할 수 없습니다.</p>
               <div className="notice" style={{ textAlign: "left" }}>
                 <div><b>제출 상태</b><br />{doneMeta}</div>
+              </div>
+              <p className="subtle" style={{ marginTop: 18 }}>
+                {redirectIn > 0
+                  ? `${redirectIn}초 후 처음 화면으로 돌아갑니다. 다음 응시자가 이어서 시험을 진행할 수 있습니다.`
+                  : "처음 화면으로 이동합니다."}
+              </p>
+              <div className="actions" style={{ justifyContent: "center" }}>
+                <button className="btn primary" onClick={resetToStart}>지금 처음 화면으로</button>
               </div>
             </div>
           </section>
