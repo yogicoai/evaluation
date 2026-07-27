@@ -135,6 +135,13 @@ export function calculateHR(emp) {
 
 export function calculateSalesScore(emp) {
   let s = emp.sales || {};
+  // 매출 데이터가 없으면 미산정(0점)으로 둔다.
+  // 구간표의 최하단이 기여도 10점 / 개인매출 5점이라, 그냥 계산하면
+  // 아무 데이터가 없어도 15점이 붙어 종합점수에 반영되어 버린다.
+  const hasData = !!(s.rawStoreTable && s.rawPersonalTable) || !!s.uploadedAt;
+  if (!hasData) {
+    return { ...s, hasData: false, contributionPct: 0, rankPct: 0, contribution: 0, individual: 0, total: 0, share: 0 };
+  }
   if (s.rawStoreTable && s.rawPersonalTable) {
     s = { ...s, ...extractSales(emp.name, s.rawStoreTable, s.rawPersonalTable) };
   }
@@ -143,5 +150,5 @@ export function calculateSalesScore(emp) {
   const contribution = officialContribution(Number(s.headcount || 3), pct);
   const individual = officialIndividual(rankPct || 100);
   const total = contribution + individual;
-  return { ...s, contributionPct: pct, rankPct, contribution, individual, total, share: pct };
+  return { ...s, hasData: true, contributionPct: pct, rankPct, contribution, individual, total, share: pct };
 }

@@ -694,11 +694,11 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
             <div className="sales-card-title">[매장 매출 기여도]</div>
             <div className="sales-card-chip">30점 만점</div>
           </div>
-          <div className="sales-card-score">{fmtNum(s.contribution, 0)}<small>점</small></div>
+          <div className="sales-card-score">{s.hasData ? <>{fmtNum(s.contribution, 0)}<small>점</small></> : <span style={{ fontSize: 28 }}>미산정</span>}</div>
           <div className="sales-card-desc">
             {s.contributionPct
               ? <>{s.headcount || 3}인 근무 기준<br />매출 기여도 <b style={{ color: "#dc2626" }}>{fmtPct(s.contributionPct)}</b></>
-              : "로우데이터 기준 자동 산정"}
+              : "자동 산정 또는 엑셀 업로드 필요"}
           </div>
         </section>
         <section className="sales-card">
@@ -706,11 +706,11 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
             <div className="sales-card-title">[개인매출(상대평가)]</div>
             <div className="sales-card-chip">20점 만점</div>
           </div>
-          <div className="sales-card-score">{fmtNum(s.individual, 0)}<small>점</small></div>
+          <div className="sales-card-score">{s.hasData ? <>{fmtNum(s.individual, 0)}<small>점</small></> : <span style={{ fontSize: 28 }}>미산정</span>}</div>
           <div className="sales-card-desc">
             {s.rank
               ? <>{s.rank}위 / {s.population}명<br />상위 <b style={{ color: "#dc2626" }}>{fmtNum(s.rankPct, 1)}%</b> · 개인매출 {fmtMoney(s.personalSales)}원</>
-              : "로우데이터 기준 자동 산정"}
+              : "자동 산정 또는 엑셀 업로드 필요"}
           </div>
         </section>
         <section className="sales-card total">
@@ -718,8 +718,10 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
             <div className="sales-card-title">[총점]</div>
             <div className="sales-card-chip">50점 만점</div>
           </div>
-          <div className="sales-card-score">{fmtNum(s.total, 0)}<small>점</small></div>
-          <div className="sales-card-desc">기여도 {fmtNum(s.contribution, 0)} + 개인 {fmtNum(s.individual, 0)}</div>
+          <div className="sales-card-score">{s.hasData ? <>{fmtNum(s.total, 0)}<small>점</small></> : <span style={{ fontSize: 28 }}>미산정</span>}</div>
+          <div className="sales-card-desc">
+            {s.hasData ? `기여도 ${fmtNum(s.contribution, 0)} + 개인 ${fmtNum(s.individual, 0)}` : "매출 데이터를 산정하면 점수가 반영됩니다"}
+          </div>
         </section>
       </div>
 
