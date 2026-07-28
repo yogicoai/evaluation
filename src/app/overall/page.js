@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import * as XLSX from "xlsx";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import DatePicker from "@/components/DatePicker";
 import { normalize } from "@/lib/scoring";
@@ -156,14 +155,6 @@ function OverallInner() {
     return true;
   }
 
-  async function syncAll() {
-    let n = 0;
-    for (const e of employees) {
-      if (await syncCompetency(e, { silent: true })) n++;
-    }
-    alert(`${n}명의 역량평가 점수를 동기화했습니다.`);
-  }
-
   function doPrint(mode) {
     if (!selected) {
       alert("인쇄할 직원을 선택해 주세요.");
@@ -227,7 +218,6 @@ function OverallInner() {
             <div className="top-actions">
               <Link href="/" className="btn ghost">홈</Link>
               <Link href="/grading" className="btn ghost">수습평가시험 관리 →</Link>
-              <button className="btn ghost" onClick={syncAll}>역량평가 점수 동기화</button>
               <button className="btn ghost" onClick={exportCSV}>CSV 다운로드</button>
               <button className="btn ghost" onClick={() => doPrint("hr")}>인사카드 인쇄</button>
               <button className="btn ghost" onClick={() => doPrint("sales")}>매출 평가 인쇄</button>
@@ -241,7 +231,7 @@ function OverallInner() {
           <section style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
               <h1>수습직원 종합 평가 대시보드</h1>
-              <p>인사카드 평가 · 매출 평가 · 역량평가를 하나의 기준으로 합산합니다. 매출 평가는 오프라인 서버 자동 연동 또는 엑셀 업로드로 산정합니다.</p>
+              <p>인사카드 평가 · 매출 평가 · 역량평가를 하나의 기준으로 합산합니다. 매출 평가는 오프라인 서버(ERP) 주문 데이터를 자동 연동해 산정합니다.</p>
             </div>
             <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
               <button className="btn ghost" onClick={() => setModal("overall")}>종합 평가 기준</button>
@@ -303,7 +293,7 @@ function Kpis({ employees, exams, answerKey, selected }) {
       </div>
       <div className="kpi"><div className="label">평가 대상자</div><div className="val">{n}</div><div className="sub">종합평가 등록 기준</div></div>
       <div className="kpi"><div className="label">평균 종합점수</div><div className="val">{fmtNum(avg, 1)}</div><div className="sub">3개 항목 반영 기준</div></div>
-      <div className="kpi"><div className="label">매출 데이터 반영</div><div className="val">{salesLoaded}</div><div className="sub">자동연동·업로드 인원</div></div>
+      <div className="kpi"><div className="label">매출 데이터 반영</div><div className="val">{salesLoaded}</div><div className="sub">자동 산정 완료 인원</div></div>
       <div className="kpi"><div className="label">평가 진행률</div><div className="val">{n ? Math.round((done / n) * 100) : 0}%</div><div className="sub">3개 항목 입력 완료</div></div>
     </section>
   );
@@ -558,11 +548,11 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
   const autoTriedRef = useRef({}); // 직원별 자동 산정 1회 시도 여부
 
   // 매출 데이터가 없으면 탭 진입 시 한 번만 자동 산정한다.
-  // 이미 데이터가 있으면 건드리지 않는다 (엑셀 업로드본·확정한 기간이 덮어써지지 않도록).
+  // 이미 데이터가 있으면 건드리지 않는다 (평가자가 확정해 둔 기간의 산정값이 덮어써지지 않도록).
   useEffect(() => {
     if (!emp || !emp.id) return;
     if (isSalesExcluded(emp)) return;         // 제외 대상은 산정하지 않음
-    if (emp.sales?.uploadedAt) return;        // 이미 산정/업로드됨
+    if (emp.sales?.uploadedAt) return;        // 이미 산정됨
     if (!emp.store) return;                   // 소속 없으면 불가
     if (autoTriedRef.current[emp.id]) return; // 이 직원은 이미 시도함
     autoTriedRef.current[emp.id] = true;
@@ -625,41 +615,6 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
     }
   }
 
-  async function handleUpload(ev) {
-    const file = ev.target.files[0];
-    ev.target.value = "";
-    if (!file) return;
-    setUploadStatus({ title: "파일 읽는 중", desc: `${file.name} 파일을 분석하고 있습니다.` });
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const sheets = {};
-      wb.SheetNames.forEach((name) => {
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null });
-        sheets[name] = rows
-          .filter((row) => (row || []).some((v) => v !== "" && v !== null && typeof v !== "undefined"))
-          .map((row) => row.map((v) => (typeof v === "undefined" ? null : v)));
-      });
-      const storeRows = Object.entries(sheets).find(([k]) => k.replace(/\s/g, "").includes("매장"))?.[1];
-      const personalRows = Object.entries(sheets).find(([k]) => k.replace(/\s/g, "").includes("개인"))?.[1];
-      if (!storeRows || !personalRows) throw new Error("필요한 시트(매장 매출 기여도 / 개인매출)를 찾지 못했습니다.");
-      const sales = {
-        ...(emp.sales || {}),
-        rawStoreTable: storeRows,
-        rawPersonalTable: personalRows,
-        uploadedAt: new Date().toISOString(),
-        fileName: file.name,
-        source: "excel",
-        autoMeta: null
-      };
-      await saveEmployee(emp.id, { sales });
-      setUploadStatus(null);
-      alert("매출 로우데이터를 반영했습니다.");
-    } catch (e) {
-      setUploadStatus({ title: "업로드 실패", desc: String(e.message || e) });
-    }
-  }
-
   return (
     <section className="card">
       <div className="panel-title">
@@ -668,12 +623,11 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
           <p>
             {s.excluded
               ? "중간관리 매장 · 일급제 · 서포터는 매출 평가(상대평가) 대상이 아닙니다."
-              : "오프라인 서버 자동 연동(권장) 또는 엑셀 업로드로 ① 매장 매출 기여도 ② 개인매출 상대평가를 산정합니다."}
+              : "오프라인 서버(ERP) 주문 데이터를 자동 연동해 ① 매장 매출 기여도 ② 개인매출 상대평가를 산정합니다."}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn ghost" onClick={openCriteria}>매출 평가 기준표</button>
-          {!s.excluded && <a className="btn ghost" href="/수습평가_매출_로우데이터_양식.xlsx" download>양식 다운로드</a>}
           {s.excluded
             ? <span className="badge gray">평가 제외 대상</span>
             : <span className="badge ok">반영 점수 {fmtNum(s.total, 0)} / 50</span>}
@@ -692,12 +646,30 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
       {!s.excluded && (
       <>
       <div className="sales-auto">
-        <div className="sales-auto-title">① 오프라인 서버 자동 산정 (ERP 매출 자동 연동)</div>
-        <p className="subtle" style={{ marginTop: 6 }}>
-          기간을 선택하면 <b>{emp.store || "소속 미입력"}</b> 매장의 주문 데이터와 전체 직영직원 매출을 집계해 기여도·상대평가 점수를 자동 산정합니다.
-          중간관리 매장 / 일급제 / 서포터는 상대평가에서 제외됩니다.
-        </p>
-        <div className="sales-auto-grid">
+        <div className="sales-upload-head">
+          <div>
+            <div className="sales-auto-title">오프라인 서버 자동 산정 (ERP 매출 자동 연동)</div>
+            <p className="subtle" style={{ marginTop: 6 }}>
+              기간을 선택하면 <b>{emp.store || "소속 미입력"}</b> 매장의 주문 데이터와 전체 직영직원 매출을 집계해 기여도·상대평가 점수를 자동 산정합니다.
+              중간관리 매장 / 일급제 / 서포터는 상대평가에서 제외됩니다.
+            </p>
+          </div>
+          <button
+            className="btn danger"
+            onClick={() => {
+              if (!emp.sales?.uploadedAt) {
+                alert("삭제할 매출 데이터가 없습니다.");
+                return;
+              }
+              if (!confirm(`${emp.name}님의 매출 데이터를 삭제하시겠습니까?\n산정된 기여도·개인매출 순위와 원본표가 모두 삭제됩니다.`)) return;
+              setUploadStatus(null);
+              saveEmployee(emp.id, { sales: {} }, { silent: false });
+            }}
+          >
+            매출 데이터 삭제
+          </button>
+        </div>
+        <div className="sales-auto-grid" style={{ marginTop: 12 }}>
           <div className="field"><span>시작일</span>
             <DatePicker value={start} onChange={setStart} placeholder="시작일 선택" />
           </div>
@@ -706,42 +678,13 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
           </div>
           <button className="btn primary" disabled={autoBusy} onClick={autoCalc}>{autoBusy ? "산정 중..." : "매출 자동 산정"}</button>
         </div>
-      </div>
-
-      <div className="sales-upload">
-        <div className="sales-upload-head">
-          <div>
-            <div className="upload-title">② 엑셀 로우데이터 업로드 (수동 방식)</div>
-            <p className="subtle">시트 `1. 매장 매출 기여도`, `2. 개인매출 (상대평가)`가 포함된 엑셀 파일</p>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <label className="btn ghost" style={{ display: "inline-block" }}>
-              파일 선택
-              <input type="file" accept=".xlsx,.xlsm" className="hidden" onChange={handleUpload} />
-            </label>
-            <button
-              className="btn danger"
-              onClick={() => {
-                if (!emp.sales?.uploadedAt) {
-                  alert("삭제할 매출 데이터가 없습니다.");
-                  return;
-                }
-                if (!confirm(`${emp.name}님의 매출 데이터를 삭제하시겠습니까?\n산정된 기여도·개인매출 순위와 원본표가 모두 삭제됩니다.`)) return;
-                setUploadStatus(null);
-                saveEmployee(emp.id, { sales: {} }, { silent: false });
-              }}
-            >
-              매출 데이터 삭제
-            </button>
-          </div>
-        </div>
         <div className="status-box" style={{ marginTop: 12 }}>
           {uploadStatus ? (
             <><b>{uploadStatus.title}</b><span>{uploadStatus.desc}</span></>
           ) : emp.sales?.uploadedAt ? (
-            <><b>{emp.sales.source === "auto" ? "자동 연동 완료" : "업로드 완료"}</b><span>{emp.sales.fileName || ""} · 매칭: 매장표 {s.storeEmployee || "-"}, 개인표 {s.personalName || "-"} · {fmtDate(emp.sales.uploadedAt)}</span></>
+            <><b>자동 연동 완료</b><span>{emp.sales.fileName || ""} · 매칭: 매장표 {s.storeEmployee || "-"}, 개인표 {s.personalName || "-"} · {fmtDate(emp.sales.uploadedAt)}</span></>
           ) : (
-            <><b>산정 안내</b><span>자동 산정 버튼을 누르거나, 엑셀 파일을 업로드해 주세요.</span></>
+            <><b>산정 안내</b><span>산정 기간을 확인한 뒤 `매출 자동 산정` 버튼을 눌러 주세요.</span></>
           )}
         </div>
       </div>
@@ -757,7 +700,7 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
           <div className="sales-card-desc">
             {s.contributionPct
               ? <>{s.headcount || 3}인 근무 기준<br />매출 기여도 <b style={{ color: "#dc2626" }}>{fmtPct(s.contributionPct)}</b></>
-              : "자동 산정 또는 엑셀 업로드 필요"}
+              : "매출 자동 산정 필요"}
           </div>
         </section>
         <section className="sales-card">
@@ -769,7 +712,7 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
           <div className="sales-card-desc">
             {s.rank
               ? <>{s.rank}위 / {s.population}명<br />상위 <b style={{ color: "#dc2626" }}>{fmtNum(s.rankPct, 1)}%</b> · 개인매출 {fmtMoney(s.personalSales)}원</>
-              : "자동 산정 또는 엑셀 업로드 필요"}
+              : "매출 자동 산정 필요"}
           </div>
         </section>
         <section className="sales-card total">
@@ -802,7 +745,7 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
           </div>
         </>
       ) : (
-        <div className="empty-state">산정된 매출 데이터가 없습니다. 자동 산정 또는 엑셀 업로드를 진행해 주세요.</div>
+        <div className="empty-state">산정된 매출 데이터가 없습니다. `매출 자동 산정` 버튼을 눌러 주세요.</div>
       )}
       </>
       )}
@@ -1043,7 +986,7 @@ function SettingsTab({ emp, saveEmployee, onDelete, onDeleteAll, count }) {
         </div>
         <div className="status-box">
           <b>데이터 구조</b>
-          <span>매출 자동 산정/엑셀 업로드 시 원본 표, 기여도 산정값, 개인매출 순위, 점수가 평가 대상자별로 저장됩니다.</span>
+          <span>매출 자동 산정 시 원본 표, 기여도 산정값, 개인매출 순위, 점수가 평가 대상자별로 저장됩니다.</span>
         </div>
         <div className="info-box" style={{ marginTop: 15 }}>
           <strong>권장 운영 순서</strong><br />
