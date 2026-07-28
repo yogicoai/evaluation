@@ -1284,6 +1284,29 @@ function SalesCriteriaModal({ onClose }) {
         </div>
         <p className="subtle" style={{ marginTop: 10 }}>* 중간관리 매장 / 일급제 / 서포터를 제외한 직영직원들만 상대평가 합니다.</p>
       </div>
+
+      <div className="criteria-block">
+        <h3 style={{ fontSize: 18 }}>매출 평가 제외 대상</h3>
+        <p style={{ color: "#4e5968", fontWeight: 600, marginBottom: 12 }}>
+          아래에 해당하는 직원은 <b>매출 평가(50점) 대상에서 제외</b>됩니다. 매출 데이터를 산정하지 않으며, 종합점수는
+          <b> 인사카드(20점) + 역량평가(30점) = 50점을 100점으로 환산</b>해 산정하므로 제외로 인한 불이익은 없습니다.
+        </p>
+        <div style={{ overflow: "auto" }}>
+          <table className="criteria-table" style={{ minWidth: 520 }}>
+            <thead><tr><th style={{ width: 180 }}>제외 구분</th><th>판정 기준</th></tr></thead>
+            <tbody>
+              <tr><td><b>중간관리 매장</b></td><td>소속 매장에 중간관리 직급 직원이 있거나 위탁(consignment) 매장인 경우</td></tr>
+              <tr><td><b>일급제</b></td><td>직급이 일급제인 경우</td></tr>
+              <tr><td><b>서포터</b></td><td>직급이 서포터인 경우</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="info-box" style={{ marginTop: 14 }}>
+          <strong>근거</strong><br />
+          수습평가 매출 데이터 양식 기준 — <i>&ldquo;중간관리 매장 / 일급제 / 서포터를 제외한 직영직원들만 상대평가 함&rdquo;</i><br />
+          상대평가 모집단은 <b>매니저 · 부매니저 · 시니어</b>(직영직원)로 구성됩니다.
+        </div>
+      </div>
     </Modal>
   );
 }
@@ -1321,6 +1344,51 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
   }
 
   if (mode === "sales") {
+    // 매출 평가 제외 대상은 점수표 대신 제외 사유와 근거를 남긴다.
+    if (sales.excluded) {
+      return (
+        <section className="print-sheet">
+          <div className="print-page">
+            <img className="print-brand" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" />
+            <div className="print-title">매출 평가표</div>
+            <p className="print-sub">{emp.name || "-"} · {emp.store || "-"} · {emp.role || "-"}</p>
+            <div className="print-meta">
+              <div className="meta-box"><div className="k">평가 결과</div><div className="v">매출 평가 제외</div></div>
+              <div className="meta-box"><div className="k">제외 사유</div><div className="v">{sales.excludeReason || emp.role || "-"}</div></div>
+              <div className="meta-box"><div className="k">평가기간</div><div className="v">{emp.period || "-"}</div></div>
+              <div className="meta-box"><div className="k">반영 점수</div><div className="v">해당 없음</div></div>
+            </div>
+            <table className="print-table">
+              <tbody>
+                <tr>
+                  <th style={{ width: "18%" }}>제외 규정</th>
+                  <td>
+                    수습평가 매출 데이터 양식 기준 — “중간관리 매장 / 일급제 / 서포터를 제외한 직영직원들만 상대평가 함”<br />
+                    상대평가 모집단은 매니저 · 부매니저 · 시니어(직영직원)로 구성됩니다.
+                  </td>
+                </tr>
+                <tr>
+                  <th>제외 판정</th>
+                  <td>
+                    {sales.excludeReason === "중간관리 매장"
+                      ? "소속 매장에 중간관리 직급 직원이 있거나 위탁 매장에 해당합니다."
+                      : `직급이 ${sales.excludeReason || emp.role || "-"}에 해당합니다.`}
+                  </td>
+                </tr>
+                <tr>
+                  <th>종합점수 산정</th>
+                  <td>
+                    매출 평가 50점을 제외하고 <b>인사카드(20점) + 역량평가(30점) = 50점을 100점으로 환산</b>해 산정합니다.
+                    제외로 인한 점수상 불이익은 없습니다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="footer-note">출력일: {new Date().toLocaleString("ko-KR")} · Yogibo 수습직원 종합평가 시스템</div>
+          </div>
+        </section>
+      );
+    }
     return (
       <section className="print-sheet">
         <div className="print-page">
@@ -1355,7 +1423,11 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
     <section className="print-sheet">
       <img className="print-brand" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" />
       <div className="print-title">수습직원 종합평가표</div>
-      <p className="print-sub">인사카드 20% · 매출 50% · 역량평가 30% 반영 기준</p>
+      <p className="print-sub">
+        {sales.excluded
+          ? "매출 평가 제외 대상 · 인사카드 40% · 역량평가 60% 환산 기준 (인사카드 20 + 역량 30 = 50점 → 100점 환산)"
+          : "인사카드 20% · 매출 50% · 역량평가 30% 반영 기준"}
+      </p>
       <div className="print-meta">
         <div className="meta-box"><div className="k">이름</div><div className="v">{emp.name || "-"}</div></div>
         <div className="meta-box"><div className="k">소속</div><div className="v">{emp.store || "-"}</div></div>
@@ -1365,7 +1437,11 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
       <div className="score-hero">
         <div><div className="label">종합평가 최종 점수</div><div className="value">{fmtNum(total.total, 1)}<small> / 100</small></div></div>
         <div style={{ textAlign: "right", fontSize: 11, color: "#6b7280", lineHeight: 1.6, fontWeight: 800 }}>
-          인사카드 {fmtNum(hr.weighted, 1)} / 20<br />매출 {fmtNum(sales.total, 0)} / 50<br />역량 {fmtNum(comp.weighted, 1)} / 30
+          {sales.excluded ? (
+            <>인사카드 {fmtNum(hr.weighted * 2, 1)} / 40<br />매출 평가 제외<br />역량 {fmtNum(comp.weighted * 2, 1)} / 60</>
+          ) : (
+            <>인사카드 {fmtNum(hr.weighted, 1)} / 20<br />매출 {fmtNum(sales.total, 0)} / 50<br />역량 {fmtNum(comp.weighted, 1)} / 30</>
+          )}
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1374,21 +1450,36 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
           <table className="print-table">
             <thead><tr><th>항목</th><th>원점수</th><th>반영점수</th><th>비고</th></tr></thead>
             <tbody>
-              <tr><td>인사카드 평가</td><td>{hr.raw} / 100</td><td>{fmtNum(hr.weighted, 1)} / 20</td><td>10개 항목 평가</td></tr>
-              <tr><td>매출 평가</td><td>{fmtNum(sales.total, 0)} / 50</td><td>{fmtNum(sales.total, 0)} / 50</td><td>{sales.headcount || "-"}인 근무 / 순위 {sales.rank || "-"}위</td></tr>
-              <tr><td>역량평가</td><td>{fmtNum(comp.raw, 0)} / 100</td><td>{fmtNum(comp.weighted, 1)} / 30</td><td>{comp.source === "수동 반영" ? "수동입력" : "시험연동"}</td></tr>
+              <tr><td>인사카드 평가</td><td>{hr.raw} / 100</td><td>{sales.excluded ? `${fmtNum(hr.weighted * 2, 1)} / 40` : `${fmtNum(hr.weighted, 1)} / 20`}</td><td>10개 항목 평가</td></tr>
+              <tr>
+                <td>매출 평가</td>
+                <td>{sales.excluded ? "제외" : `${fmtNum(sales.total, 0)} / 50`}</td>
+                <td>{sales.excluded ? "해당 없음" : `${fmtNum(sales.total, 0)} / 50`}</td>
+                <td>{sales.excluded ? `제외 사유: ${sales.excludeReason || emp.role || "-"}` : `${sales.headcount || "-"}인 근무 / 순위 ${sales.rank || "-"}위`}</td>
+              </tr>
+              <tr><td>역량평가</td><td>{fmtNum(comp.raw, 0)} / 100</td><td>{sales.excluded ? `${fmtNum(comp.weighted * 2, 1)} / 60` : `${fmtNum(comp.weighted, 1)} / 30`}</td><td>{comp.source === "수동 반영" ? "수동입력" : "시험연동"}</td></tr>
             </tbody>
           </table>
         </div>
         <div style={{ border: "1px solid #d1d5db", borderRadius: 12, padding: 10 }}>
-          <h2 style={{ fontSize: 13, margin: "0 0 8px" }}>매출 평가 상세</h2>
+          <h2 style={{ fontSize: 13, margin: "0 0 8px" }}>{sales.excluded ? "매출 평가 제외 사유" : "매출 평가 상세"}</h2>
           <table className="print-table">
             <tbody>
-              <tr><th style={{ width: "36%" }}>매장 매출 기여도</th><td>{sales.contributionPct ? fmtPct(sales.contributionPct) : "-"}</td></tr>
-              <tr><th>매장 기여도 점수</th><td>{fmtNum(sales.contribution, 0)} / 30</td></tr>
-              <tr><th>개인매출 순위</th><td>{sales.rank ? `${sales.rank}위 / ${sales.population}명` : "-"}</td></tr>
-              <tr><th>개인매출 합계</th><td>{sales.personalSales ? fmtMoney(sales.personalSales) + "원" : "-"}</td></tr>
-              <tr><th>개인매출 점수</th><td>{fmtNum(sales.individual, 0)} / 20</td></tr>
+              {sales.excluded ? (
+                <>
+                  <tr><th style={{ width: "30%" }}>제외 구분</th><td>{sales.excludeReason || emp.role || "-"}</td></tr>
+                  <tr><th>근거</th><td>“중간관리 매장 / 일급제 / 서포터를 제외한 직영직원들만 상대평가 함” (수습평가 매출 데이터 양식 기준)</td></tr>
+                  <tr><th>점수 처리</th><td>매출 50점 제외 후 인사카드·역량평가 50점을 100점으로 환산</td></tr>
+                </>
+              ) : (
+                <>
+                  <tr><th style={{ width: "36%" }}>매장 매출 기여도</th><td>{sales.contributionPct ? fmtPct(sales.contributionPct) : "-"}</td></tr>
+                  <tr><th>매장 기여도 점수</th><td>{fmtNum(sales.contribution, 0)} / 30</td></tr>
+                  <tr><th>개인매출 순위</th><td>{sales.rank ? `${sales.rank}위 / ${sales.population}명` : "-"}</td></tr>
+                  <tr><th>개인매출 합계</th><td>{sales.personalSales ? fmtMoney(sales.personalSales) + "원" : "-"}</td></tr>
+                  <tr><th>개인매출 점수</th><td>{fmtNum(sales.individual, 0)} / 20</td></tr>
+                </>
+              )}
             </tbody>
           </table>
         </div>
