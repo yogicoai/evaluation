@@ -118,9 +118,29 @@ export async function buildSalesData({ name, store, startDate, endDate }) {
     .map((m) => ({ name: String(m.managerName).trim(), store: String(m.storeName).trim(), sales: salesOf(m.managerName, m.storeName) }))
     .filter((p) => p.sales > 0);
 
-  // 평가 대상자는 매출 0원이어도 항상 포함
   const candidateSales = salesOf(name, store);
-  if (!pool.some((p) => strip(p.name) === strip(name) && storeMatch(p.store, store))) {
+
+  // 평가 대상자가 제외 대상(중간관리 매장 / 일급제 / 서포터)인지 판정한다.
+  // 제외 대상이면 상대평가 순위표에 넣지 않는다.
+  // (예전에는 "매출 0원이어도 항상 포함"시켜, 규정상 제외돼야 할 사람이 순위·점수를 받았다)
+  const candidateStaff = staff.find(
+    (m) => strip(m.managerName) === strip(name) && storeMatch(m.storeName, store)
+  );
+  const candidateRole = String(candidateStaff?.role || "").trim();
+  const inMidStore = midStores.has(strip(candidateStaff?.storeName || store));
+  const excluded =
+    inMidStore ||
+    candidateStaff?.consignment === "Y" ||
+    (!!candidateRole && !DIRECT_ROLES.includes(candidateRole));
+  const excludeReason = inMidStore
+    ? "중간관리 매장"
+    : candidateStaff?.consignment === "Y"
+      ? "위탁 매장"
+      : candidateRole && !DIRECT_ROLES.includes(candidateRole)
+        ? candidateRole
+        : "";
+
+  if (!excluded && !pool.some((p) => strip(p.name) === strip(name) && storeMatch(p.store, store))) {
     pool.push({ name: String(name).trim(), store: String(store).trim(), sales: candidateSales });
   }
   pool.sort((a, b) => b.sales - a.sales || String(a.name).localeCompare(String(b.name), "ko"));
@@ -138,6 +158,9 @@ export async function buildSalesData({ name, store, startDate, endDate }) {
     personalRows,
     meta: {
       period: `${startDate} ~ ${endDate}`,
+      excluded,
+      excludeReason,
+      candidateRole,
       storeTotal,
       candidateSales,
       contributionPct: storeTotal ? Math.round((candidateSales / storeTotal) * 1000) / 10 : 0,

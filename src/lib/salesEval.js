@@ -133,8 +133,32 @@ export function calculateHR(emp) {
   return { raw, weighted: Math.round(raw * 0.2 * 10) / 10 };
 }
 
+// 매출 평가 제외 대상 (요청서: 중간관리 매장 / 일급제 / 서포터 제외)
+// 원본 HTML은 이 규칙을 코드로 갖고 있지 않았고, 엑셀을 만드는 담당자가 손으로 걸렀다.
+// 자동 산정에서는 사람이 거르는 단계가 없으므로 코드가 대신 판정한다.
+const EXCLUDED_ROLE_RE = /중간관리|일급|서포터/;
+
+export function isSalesExcludedRole(role) {
+  return EXCLUDED_ROLE_RE.test(String(role || "").trim());
+}
+
+// 직급 또는 (자동 산정 결과의) 매장 단위 판정으로 제외 여부를 결정
+export function isSalesExcluded(emp) {
+  if (!emp) return false;
+  if (emp.sales?.autoMeta?.excluded) return true;
+  return isSalesExcludedRole(emp.role);
+}
+
 export function calculateSalesScore(emp) {
   let s = emp.sales || {};
+  // 매출 평가 제외 대상은 산정하지 않는다. 종합점수에서도 매출 항목을 빼고 환산한다.
+  if (isSalesExcluded(emp)) {
+    return {
+      ...s, hasData: false, excluded: true,
+      excludeReason: String(emp.role || "").trim() || "매출 평가 제외 대상",
+      contributionPct: 0, rankPct: 0, contribution: 0, individual: 0, total: 0, share: 0
+    };
+  }
   // 매출 데이터가 없으면 미산정(0점)으로 둔다.
   // 구간표의 최하단이 기여도 10점 / 개인매출 5점이라, 그냥 계산하면
   // 아무 데이터가 없어도 15점이 붙어 종합점수에 반영되어 버린다.

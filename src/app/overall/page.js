@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import DatePicker from "@/components/DatePicker";
 import { normalize } from "@/lib/scoring";
-import { HR_ITEMS, GRADE_SCORE, matchName, parseNumberValue } from "@/lib/salesEval";
+import { HR_ITEMS, GRADE_SCORE, matchName, parseNumberValue, isSalesExcluded } from "@/lib/salesEval";
 import { calculateTotal, calculateCompetency, completion, matchExam, fmtNum, fmtMoney, fmtPct, formatRawCell } from "@/lib/overallCalc";
 
 const PAGE_SIZE = 10;
@@ -376,7 +376,7 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
                     <td style={{ whiteSpace: "nowrap" }}>{e.store || "-"}</td>
                     <td><b>{e.name}</b><br /><span style={{ color: "#6b7280" }}>{e.role || "-"}</span></td>
                     <td>{r.hr.raw} / 100</td>
-                    <td>{fmtNum(r.sales.total, 0)} / 50</td>
+                    <td>{r.sales.excluded ? <span style={{ color: "#8b95a1" }}>제외</span> : `${fmtNum(r.sales.total, 0)} / 50`}</td>
                     <td>{fmtNum(r.comp.raw, 0)} / 100</td>
                     <td><b style={{ fontSize: 16 }}>{fmtNum(r.total, 1)}</b></td>
                     <td>{c.done ? <span className="badge ok">완료</span> : <span className="badge warn">진행 중</span>}</td>
@@ -418,11 +418,19 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
 function SummaryPanel({ emp, exams, answerKey, setTab }) {
   const r = calculateTotal(emp, exams, answerKey);
   const c = completion(emp, exams, answerKey);
-  const items = [
-    ["인사카드", `${r.hr.raw} / 100`, r.hr.weighted, 20, "bluebar"],
-    ["매출", `${fmtNum(r.sales.total, 0)} / 50`, r.sales.total, 50, "greenbar"],
-    ["역량평가", `${fmtNum(r.comp.raw, 0)} / 100`, r.comp.weighted, 30, "orangebar"]
-  ];
+  // 매출 제외 대상은 인사카드+역량 50점을 100점으로 환산하므로 항목 만점도 2배로 표시한다.
+  const excl = r.sales.excluded;
+  const items = excl
+    ? [
+        ["인사카드", `${r.hr.raw} / 100`, r.hr.weighted * 2, 40, "bluebar"],
+        ["매출", "평가 제외", 0, 0, "greenbar"],
+        ["역량평가", `${fmtNum(r.comp.raw, 0)} / 100`, r.comp.weighted * 2, 60, "orangebar"]
+      ]
+    : [
+        ["인사카드", `${r.hr.raw} / 100`, r.hr.weighted, 20, "bluebar"],
+        ["매출", `${fmtNum(r.sales.total, 0)} / 50`, r.sales.total, 50, "greenbar"],
+        ["역량평가", `${fmtNum(r.comp.raw, 0)} / 100`, r.comp.weighted, 30, "orangebar"]
+      ];
   return (
     <div className="employee-summary">
       <div>
@@ -532,12 +540,35 @@ function HrTab({ emp, saveEmployee, openCriteria }) {
   );
 }
 
+// 기본 산정 기간 = 올해 1월 1일 ~ 전월 말일 (7월이면 1/1~6/30).
+// 진행 중인 달은 매출이 덜 쌓여 기여도·순위가 흔들리므로 완료된 달까지만 잡는다.
+// 단 1월에는 완료된 달이 없으므로 오늘까지로 둔다.
+function defaultSalesPeriod() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const end = now.getMonth() === 0 ? now : new Date(y, now.getMonth(), 0);
+  return { start: toDateInput(new Date(y, 0, 1)), end: toDateInput(end) };
+}
+
 function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [autoBusy, setAutoBusy] = useState(false);
-  // 기본 산정 기간 = 올해 1월 1일 ~ 오늘 (예: 2026년이면 2026-01-01 ~ 오늘)
-  const [start, setStart] = useState(() => toDateInput(new Date(new Date().getFullYear(), 0, 1)));
-  const [end, setEnd] = useState(() => toDateInput(new Date()));
+  const [start, setStart] = useState(() => defaultSalesPeriod().start);
+  const [end, setEnd] = useState(() => defaultSalesPeriod().end);
+  const autoTriedRef = useRef({}); // 직원별 자동 산정 1회 시도 여부
+
+  // 매출 데이터가 없으면 탭 진입 시 한 번만 자동 산정한다.
+  // 이미 데이터가 있으면 건드리지 않는다 (엑셀 업로드본·확정한 기간이 덮어써지지 않도록).
+  useEffect(() => {
+    if (!emp || !emp.id) return;
+    if (isSalesExcluded(emp)) return;         // 제외 대상은 산정하지 않음
+    if (emp.sales?.uploadedAt) return;        // 이미 산정/업로드됨
+    if (!emp.store) return;                   // 소속 없으면 불가
+    if (autoTriedRef.current[emp.id]) return; // 이 직원은 이미 시도함
+    autoTriedRef.current[emp.id] = true;
+    autoCalc({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emp?.id]);
 
   if (!emp) return <section className="card"><div className="empty-state">평가 대상자를 먼저 선택해 주세요.</div></section>;
 
@@ -545,13 +576,15 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
   const s = r.sales;
 
   // ── 오프라인 서버 자동 산정 (ERP 자동 업데이트) ──
-  async function autoCalc() {
+  // silent: 탭 진입 시 자동 실행된 경우 — 성공 알림을 띄우지 않는다.
+  async function autoCalc(opts = {}) {
+    const silent = !!opts.silent;
     if (!emp.store) {
-      alert("대상자의 소속 매장이 입력되어 있어야 자동 산정이 가능합니다. '기준 및 데이터 관리' 탭에서 소속을 입력해 주세요.");
+      if (!silent) alert("대상자의 소속 매장이 입력되어 있어야 자동 산정이 가능합니다. '기준 및 데이터 관리' 탭에서 소속을 입력해 주세요.");
       return;
     }
     if (!start || !end) {
-      alert("산정 기간을 선택해 주세요.");
+      if (!silent) alert("산정 기간을 선택해 주세요.");
       return;
     }
     setAutoBusy(true);
@@ -564,6 +597,15 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "자동 산정 실패");
+
+      // 서버가 제외 대상으로 판정하면 점수를 만들지 않고 제외 사실만 기록한다.
+      if (d.meta?.excluded) {
+        await saveEmployee(emp.id, { sales: { autoMeta: d.meta, excludedAt: new Date().toISOString() } });
+        setUploadStatus(null);
+        if (!silent) alert(`${emp.name} 님은 매출 평가 제외 대상입니다.\n사유: ${d.meta.excludeReason || "제외 직급"}\n종합점수는 인사카드·역량평가로 환산됩니다.`);
+        return;
+      }
+
       const sales = {
         ...(emp.sales || {}),
         rawStoreTable: d.storeRows,
@@ -575,9 +617,9 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
       };
       const ok = await saveEmployee(emp.id, { sales, period: emp.period || d.meta.period });
       setUploadStatus(null);
-      if (ok) alert(`매출 데이터를 자동 산정했습니다.\n기간: ${d.meta.period}\n개인매출 ${fmtMoney(d.meta.candidateSales)}원 / 매장매출 ${fmtMoney(d.meta.storeTotal)}원 (기여도 ${d.meta.contributionPct}%)\n상대평가 ${d.meta.rank || "-"}위 / ${d.meta.population}명`);
+      if (ok && !silent) alert(`매출 데이터를 자동 산정했습니다.\n기간: ${d.meta.period}\n개인매출 ${fmtMoney(d.meta.candidateSales)}원 / 매장매출 ${fmtMoney(d.meta.storeTotal)}원 (기여도 ${d.meta.contributionPct}%)\n상대평가 ${d.meta.rank || "-"}위 / ${d.meta.population}명`);
     } catch (e) {
-      setUploadStatus({ title: "자동 산정 실패", desc: String(e.message || e) });
+      setUploadStatus(silent ? null : { title: "자동 산정 실패", desc: String(e.message || e) });
     } finally {
       setAutoBusy(false);
     }
@@ -623,15 +665,32 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
       <div className="panel-title">
         <div>
           <h2>2. 매출 평가</h2>
-          <p>오프라인 서버 자동 연동(권장) 또는 엑셀 업로드로 ① 매장 매출 기여도 ② 개인매출 상대평가를 산정합니다.</p>
+          <p>
+            {s.excluded
+              ? "중간관리 매장 · 일급제 · 서포터는 매출 평가(상대평가) 대상이 아닙니다."
+              : "오프라인 서버 자동 연동(권장) 또는 엑셀 업로드로 ① 매장 매출 기여도 ② 개인매출 상대평가를 산정합니다."}
+          </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn ghost" onClick={openCriteria}>매출 평가 기준표</button>
-          <a className="btn ghost" href="/수습평가_매출_로우데이터_양식.xlsx" download>양식 다운로드</a>
-          <span className="badge ok">반영 점수 {fmtNum(s.total, 0)} / 50</span>
+          {!s.excluded && <a className="btn ghost" href="/수습평가_매출_로우데이터_양식.xlsx" download>양식 다운로드</a>}
+          {s.excluded
+            ? <span className="badge gray">평가 제외 대상</span>
+            : <span className="badge ok">반영 점수 {fmtNum(s.total, 0)} / 50</span>}
         </div>
       </div>
 
+      {s.excluded && (
+        <div className="info-box" style={{ marginTop: 4 }}>
+          <strong>{emp.name} 님은 매출 평가 제외 대상입니다{s.excludeReason ? ` (${s.excludeReason})` : ""}.</strong><br />
+          평가 기준상 <b>중간관리 매장 / 일급제 / 서포터</b>는 개인매출 상대평가에서 제외됩니다.
+          종합점수는 매출 50점을 빼고 <b>인사카드(20) + 역량평가(30) = 50점을 100점으로 환산</b>해 산정하므로,
+          제외로 인한 불이익은 없습니다.
+        </div>
+      )}
+
+      {!s.excluded && (
+      <>
       <div className="sales-auto">
         <div className="sales-auto-title">① 오프라인 서버 자동 산정 (ERP 매출 자동 연동)</div>
         <p className="subtle" style={{ marginTop: 6 }}>
@@ -744,6 +803,8 @@ function SalesTab({ emp, exams, answerKey, saveEmployee, openCriteria }) {
         </>
       ) : (
         <div className="empty-state">산정된 매출 데이터가 없습니다. 자동 산정 또는 엑셀 업로드를 진행해 주세요.</div>
+      )}
+      </>
       )}
     </section>
   );
