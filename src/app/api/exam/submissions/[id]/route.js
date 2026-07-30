@@ -6,7 +6,7 @@ import { syncSubmissionToEmployee } from "@/lib/evaluationSync";
 // 평가자: 채점/메모/자동채점 수정값 저장
 export async function PATCH(req, { params }) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -61,7 +61,7 @@ export async function PATCH(req, { params }) {
 // 평가자: 응시 데이터 삭제 (재응시 허용 목적)
 export async function DELETE(req, { params }) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

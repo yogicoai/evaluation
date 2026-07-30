@@ -52,7 +52,7 @@ export async function POST(req) {
 // 평가자: 전체 응시 데이터 조회
 export async function GET() {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

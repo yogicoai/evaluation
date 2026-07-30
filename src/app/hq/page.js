@@ -4,9 +4,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
+import DateTextInput from "@/components/DateTextInput";
 import { HQ_COMPANY, HQ_CATEGORIES, HQ_ITEMS, HQ_SCALE_LABELS, HQ_TOTAL_MAX, HQ_GRADE_CRITERIA, hqTotal, hqAnsweredCount, hqGrade } from "@/lib/hqForm";
 
-const LOGO = "https://yogibo.kr/web/img/icon/logo3_on.png";
+const LOGO = "https://www.yogico.kr/img/coMake2.png";
 
 function fmtDate(iso) {
   if (!iso) return "-";
@@ -22,7 +23,7 @@ const EMPTY_FORM = { dept: "", rank: "", name: "", joinDate: "", period: "", eva
 
 export default function HqPage() {
   return (
-    <EvaluatorGate title={`${HQ_COMPANY} 수습 평가 (본사&물류)`}>
+    <EvaluatorGate title={`${HQ_COMPANY} 수습 평가 (본사&물류)`} scope="hq" logo={LOGO}>
       <HqInner />
     </EvaluatorGate>
   );
@@ -141,7 +142,7 @@ function HqInner() {
             <div className="top-actions">
               <Link href="/" className="btn ghost">홈</Link>
               <button className="btn ghost" onClick={() => setGuideOpen(true)}>평가 지침</button>
-              <PasswordManageButton />
+              <PasswordManageButton scope="hq" scopeLabel="본사&물류" />
               {mode === "list"
                 ? <button className="btn primary" onClick={openNew}>새 평가 작성</button>
                 : <button className="btn ghost" onClick={() => setMode("list")}>← 목록으로</button>}
@@ -151,7 +152,7 @@ function HqInner() {
 
         <main className="wrap">
           {mode === "list" && (
-            <ListView list={list} loading={loading} onNew={openNew} onEdit={openEdit} onDelete={removeEvaluation} onDeleteAll={removeAll} onRefresh={load} />
+            <ListView list={list} loading={loading} onNew={openNew} onEdit={openEdit} onDelete={removeEvaluation} onDeleteAll={removeAll} onRefresh={load} onOpenCriteria={() => setGuideOpen(true)} />
           )}
           {mode === "form" && (
             <FormView
@@ -172,7 +173,7 @@ function HqInner() {
 }
 
 /* ─── 게시판 목록: 저장된 평가의 종합 결과만 표시 ─── */
-function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteAll, onRefresh }) {
+function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteAll, onRefresh, onOpenCriteria }) {
   const [search, setSearch] = useState("");
   const [resultFilter, setResultFilter] = useState("");
 
@@ -206,13 +207,10 @@ function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteAll, onRefre
       <section style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div>
           <h1>{HQ_COMPANY} 수습기간 평가표</h1>
-          <p>본사&물류 수습직원의 수습기간 평가를 게시판 형식으로 관리합니다. 항목을 선택하면 상세 평가표를 확인·수정할 수 있습니다.</p>
+          <p>본사&물류 수습직원의 수습기간 평가를 리스트로 관리합니다. 항목을 선택하면 상세 평가표를 확인·수정할 수 있습니다.</p>
         </div>
-        <div className="weight-pill">
-          <span className="pill">업무능력 <b>45</b></span>
-          <span className="pill">근무태도 <b>30</b></span>
-          <span className="pill">발전 가능성 <b>25</b></span>
-        </div>
+        {/* 카테고리별 배점(업무능력 45 / 근무태도 30 / 발전 가능성 25)은 노출하지 않고 기준 버튼으로 대체 */}
+        <button className="btn ghost" onClick={onOpenCriteria}>평가 기준 보기</button>
       </section>
 
       <section className="kpis" style={{ gridTemplateColumns: "repeat(4, minmax(0,1fr))" }}>
@@ -225,8 +223,8 @@ function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteAll, onRefre
       <section className="card" style={{ marginTop: 18 }}>
         <div className="panel-title">
           <div>
-            <h2>수습 평가 게시판</h2>
-            <p>저장된 평가의 종합평가 결과입니다. 행을 클릭하면 평가표 상세·수정 화면으로 이동합니다.</p>
+            <h2>수습 평가 리스트</h2>
+            <p>저장된 평가의 결과입니다. 행을 클릭하면 평가표 상세·수정 화면으로 이동합니다.</p>
           </div>
           <span className="badge gray">{rows.length}건</span>
         </div>
@@ -242,31 +240,37 @@ function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteAll, onRefre
           <button className="btn danger" onClick={onDeleteAll}>전체 삭제</button>
           <button className="btn primary" onClick={onNew}>새 평가 작성</button>
         </div>
+        {/* 컬럼 순서: 성명 / 소속 / 직급 / 평가일 / 평가기간 / 총점 / 결과 / 평가자 / 관리
+            제목 행과 데이터 행의 정렬을 동일하게 맞춘다(hq-list). */}
         <div className="table-wrap">
-          <table>
+          <table className="hq-list">
             <colgroup>
-              <col style={{ width: 110 }} /><col style={{ width: 150 }} /><col style={{ width: 170 }} />
-              <col style={{ width: 200 }} /><col style={{ width: 90 }} /><col style={{ width: 130 }} />
-              <col style={{ width: 110 }} /><col style={{ width: 150 }} />
+              <col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 90 }} />
+              <col style={{ width: 110 }} /><col style={{ width: 190 }} /><col style={{ width: 100 }} />
+              <col style={{ width: 130 }} /><col style={{ width: 120 }} /><col style={{ width: 150 }} />
             </colgroup>
             <thead>
-              <tr><th>평가일</th><th>소속</th><th>성명 / 직급</th><th>평가기간</th><th>총점</th><th>종합평가</th><th>평가자</th><th>관리</th></tr>
+              <tr>
+                <th className="left">성명</th><th className="left">소속</th><th>직급</th>
+                <th>평가일</th><th>평가기간</th><th>총점</th><th>결과</th><th>평가자</th><th>관리</th>
+              </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="empty-state">{loading ? "불러오는 중..." : "등록된 수습 평가가 없습니다. '새 평가 작성'으로 첫 평가를 등록해 주세요."}</td></tr>
+                <tr><td colSpan={9} className="empty-state">{loading ? "불러오는 중..." : "등록된 수습 평가가 없습니다. '새 평가 작성'으로 첫 평가를 등록해 주세요."}</td></tr>
               )}
               {rows.map((ev) => (
                 <tr key={ev.id} onClick={() => onEdit(ev)}>
+                  <td className="left"><b>{ev.name}</b></td>
+                  <td className="left">{ev.dept || "-"}</td>
+                  <td>{ev.rank || "-"}</td>
                   <td>{ev.evalDate || fmtDate(ev.createdAt)}</td>
-                  <td>{ev.dept || "-"}</td>
-                  <td><b>{ev.name}</b><br /><span style={{ color: "#8b95a1" }}>{ev.rank || "-"}</span></td>
                   <td>{ev.period || "-"}</td>
-                  <td><b style={{ fontSize: 16 }}>{ev.total}</b><span style={{ color: "#8b95a1", fontSize: 12 }}> / {HQ_TOTAL_MAX}</span></td>
+                  <td><b style={{ fontSize: 15 }}>{ev.total}</b><span style={{ color: "#8b95a1", fontSize: 12 }}> / {HQ_TOTAL_MAX}</span></td>
                   <td><span className={"badge " + ev.gradeInfo.tone}>{ev.gradeInfo.grade} · {ev.gradeInfo.result}</span></td>
                   <td>{ev.evaluator || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
                       <button className="btn ghost" style={{ padding: "8px 11px", fontSize: 12 }} onClick={() => onEdit(ev)}>상세·수정</button>
                       <button className="btn danger" style={{ padding: "8px 11px", fontSize: 12 }} onClick={() => onDelete(ev)}>삭제</button>
                     </div>
@@ -285,6 +289,7 @@ function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteAll, onRefre
 function FormView({ form, setForm, editingId, total, grade, saving, onSave, onPrint, onDelete }) {
   const answered = hqAnsweredCount(form.scores);
   const set = (k) => (e) => setForm((prev) => ({ ...prev, [k]: e.target.value }));
+  const setField = (k) => (v) => setForm((prev) => ({ ...prev, [k]: v }));
 
   function setScore(idx, value) {
     setForm((prev) => {
@@ -324,14 +329,15 @@ function FormView({ form, setForm, editingId, total, grade, saving, onSave, onPr
           <label className="field"><span>성명 *</span>
             <input value={form.name} placeholder="이름" onChange={set("name")} />
           </label>
+          {/* 날짜는 숫자만 입력하면 구분 기호가 자동으로 붙는다 (20260501 → 2026/05/01) */}
           <label className="field"><span>입사일</span>
-            <input value={form.joinDate} placeholder="예: 2026/05/01" onChange={set("joinDate")} />
+            <DateTextInput value={form.joinDate} onChange={setField("joinDate")} />
           </label>
           <label className="field"><span>평가기간</span>
-            <input value={form.period} placeholder="예: 2026/05/01 ~ 2026/07/31" onChange={set("period")} />
+            <DateTextInput value={form.period} range onChange={setField("period")} />
           </label>
           <label className="field"><span>평가일</span>
-            <input value={form.evalDate} placeholder="예: 2026/07/27" onChange={set("evalDate")} />
+            <DateTextInput value={form.evalDate} onChange={setField("evalDate")} />
           </label>
         </div>
       </section>
@@ -463,17 +469,26 @@ function GuideModal({ onClose }) {
 function HqPrintSheet({ form, total, grade }) {
   let flatIdx = -1;
   return (
-    <section className="print-sheet">
-      <img className="print-brand" src={LOGO} alt="Yogibo" />
+    <section className="print-sheet hq-print">
+      <img className="print-brand" src={LOGO} alt={HQ_COMPANY} />
       <div className="print-title">{HQ_COMPANY} 수습기간 평가표</div>
       <p className="print-sub">본사&물류 · 수습 근로자 평가 (취업규칙 제11조 근거)</p>
 
+      {/* 화면 대시보드와 같은 색감의 결과 배너 */}
+      <div className="hq-print-hero">
+        <div>
+          <div className="k">종합평가 총점</div>
+          <div className="v">{total}<small> / {HQ_TOTAL_MAX}</small></div>
+        </div>
+        <div className="grade">{grade.label}<br />{grade.result}</div>
+      </div>
+
       <h2 style={{ fontSize: 13, margin: "12px 0 6px" }}>1. 인적사항</h2>
-      <table className="print-table">
+      <table className="print-table hq-info">
         <tbody>
           <tr>
-            <th style={{ width: "14%" }}>소 속</th><td style={{ width: "36%" }}>{form.dept || "-"}</td>
-            <th style={{ width: "14%" }}>직 급</th><td>{form.rank || "-"}</td>
+            <th>소 속</th><td style={{ width: "36%" }}>{form.dept || "-"}</td>
+            <th>직 급</th><td>{form.rank || "-"}</td>
           </tr>
           <tr>
             <th>성 명</th><td>{form.name || "-"}</td>
@@ -487,7 +502,7 @@ function HqPrintSheet({ form, total, grade }) {
       </table>
 
       <h2 style={{ fontSize: 13, margin: "12px 0 6px" }}>2. 평가내용</h2>
-      <table className="print-table">
+      <table className="print-table hq-items">
         <thead>
           <tr>
             <th style={{ width: "13%" }}>구 분</th><th>내 용</th>
@@ -504,18 +519,18 @@ function HqPrintSheet({ form, total, grade }) {
               const si = selected !== null ? item.scale.indexOf(selected) : -1;
               return (
                 <tr key={idx}>
-                  {i === 0 && <th rowSpan={cat.items.length} style={{ textAlign: "center", verticalAlign: "middle" }}>{cat.name}</th>}
-                  <td>{item.text}{si >= 0 ? ` — ${HQ_SCALE_LABELS[si]}` : ""}</td>
-                  <td style={{ textAlign: "center" }}>{item.scale[0]}</td>
-                  <td style={{ textAlign: "center", fontWeight: 800 }}>{selected ?? "-"}</td>
+                  {i === 0 && <th rowSpan={cat.items.length} className="cat">{cat.name}</th>}
+                  <td className="q">{item.text}{si >= 0 ? ` — ${HQ_SCALE_LABELS[si]}` : ""}</td>
+                  <td>{item.scale[0]}</td>
+                  <td className="score">{selected ?? "-"}</td>
                 </tr>
               );
             })
           )}
-          <tr>
-            <th colSpan={2} style={{ textAlign: "right" }}>합 계</th>
-            <th style={{ textAlign: "center" }}>{HQ_TOTAL_MAX}</th>
-            <th style={{ textAlign: "center" }}>{total}</th>
+          <tr className="sum">
+            <th colSpan={2}>합 계</th>
+            <th>{HQ_TOTAL_MAX}</th>
+            <th>{total}</th>
           </tr>
         </tbody>
       </table>
@@ -527,7 +542,12 @@ function HqPrintSheet({ form, total, grade }) {
             <th style={{ width: "14%" }}>종합 의견</th>
             <td><div className="note" style={{ minHeight: 40 }}>{form.opinion || "-"}</div></td>
             <th style={{ width: "12%" }}>평 가</th>
-            <td style={{ width: "20%", textAlign: "center", fontWeight: 800 }}>{grade.grade} ({total}점)<br />{grade.result}</td>
+            <td
+              className={"hq-grade-" + grade.tone}
+              style={{ width: "20%", textAlign: "center", fontWeight: 800, verticalAlign: "middle" }}
+            >
+              {grade.grade} ({total}점)<br />{grade.result}
+            </td>
           </tr>
           <tr>
             <th>평가자</th>

@@ -497,10 +497,16 @@ tbody tr:last-child td { border-bottom: 0; }
 .hq-item-head {
   padding: 10px 14px; font-size: 12px; color: var(--muted); font-weight: 800;
 }
+/* 구분 항목은 머리글·본문 모두 가운데 정렬 (내용 열만 좌측) */
 .hq-item-head > div { text-align: center; }
 .hq-item-head > div:nth-child(2) { text-align: left; }
 .hq-item-row { padding: 12px 14px; border-radius: 14px; background: var(--line-soft); margin-bottom: 8px; }
-.hq-item-row .hq-cat { font-size: 12px; font-weight: 800; color: var(--text-sub); }
+.hq-item-row .hq-cat { font-size: 12px; font-weight: 800; color: var(--text-sub); text-align: center; }
+
+/* ─── 수습 평가 리스트: 머리글과 본문 정렬 일치 ─── */
+.hq-list th, .hq-list td { text-align: center; }
+.hq-list th.left, .hq-list td.left { text-align: left; }
+.hq-list td { white-space: nowrap; }
 .hq-item-row .hq-text { font-size: 14px; line-height: 1.5; letter-spacing: -.01em; }
 .hq-item-row .hq-max { text-align: center; font-size: 13px; color: var(--muted); font-weight: 700; }
 .hq-item-row .hq-score { text-align: center; font-size: 15px; font-weight: 800; color: var(--primary-dark); font-variant-numeric: tabular-nums; }
@@ -560,6 +566,36 @@ tbody tr:last-child td { border-bottom: 0; }
 .print-sheet .score-card .k { font-size: 10px; color: #8b95a1; font-weight: 800; }
 .print-sheet .score-card .v { font-size: 20px; color: #191f28; font-weight: 800; line-height: 1.1; margin-top: 4px; }
 .print-sheet .score-card .s { font-size: 10px; color: #6b7684; line-height: 1.4; margin-top: 5px; }
+
+/* ─── 본사&물류 평가표 인쇄: 화면 대시보드와 같은 색감 유지 ───
+   배경색이 인쇄에서 날아가지 않도록 print-color-adjust를 강제한다. */
+.hq-print, .hq-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.hq-print .print-title { color: var(--navy); }
+.hq-print .hq-print-hero {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 16px; border-radius: 14px; margin: 12px 0;
+  background: linear-gradient(135deg, #3182f6 0%, #1b64da 100%); color: #fff;
+}
+.hq-print .hq-print-hero .k { font-size: 11px; font-weight: 800; color: rgba(255, 255, 255, .8); }
+.hq-print .hq-print-hero .v { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
+.hq-print .hq-print-hero .v small { font-size: 14px; color: rgba(255, 255, 255, .7); }
+.hq-print .hq-print-hero .grade {
+  padding: 8px 14px; border-radius: 999px; background: rgba(255, 255, 255, .2);
+  font-size: 13px; font-weight: 800; text-align: center; line-height: 1.4;
+}
+.hq-print .print-table th { background: #f2f4f6; color: #4e5968; }
+/* 인적사항: 구분·값 모두 가운데 정렬 */
+.hq-print .hq-info th, .hq-print .hq-info td { text-align: center; vertical-align: middle; }
+.hq-print .hq-info th { background: #f2f4f6; width: 14%; }
+/* 평가내용: 구분/배점/점수 가운데, 내용만 좌측 */
+.hq-print .hq-items th, .hq-print .hq-items td { text-align: center; vertical-align: middle; }
+.hq-print .hq-items td.q { text-align: left; }
+.hq-print .hq-items .cat { background: #f8fafb; font-weight: 800; color: #4e5968; }
+.hq-print .hq-items .score { font-weight: 800; color: #1b64da; }
+.hq-print .hq-items .sum th, .hq-print .hq-items .sum td { background: #e8f3ff; color: #1b64da; font-weight: 800; }
+.hq-print .hq-grade-ok { background: #e5f9f1; color: #00a05e; }
+.hq-print .hq-grade-warn { background: #fff4e5; color: #e5780c; }
+.hq-print .hq-grade-danger { background: #fdeaea; color: #e42939; }
 
 /* ─── 반응형 ─── */
 @media (max-width: 1100px) {

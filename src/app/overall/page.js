@@ -221,7 +221,7 @@ function OverallInner() {
               <button className="btn ghost" onClick={exportCSV}>CSV 다운로드</button>
               <button className="btn ghost" onClick={() => doPrint("hr")}>인사카드 인쇄</button>
               <button className="btn ghost" onClick={() => doPrint("sales")}>매출 평가 인쇄</button>
-              <PasswordManageButton />
+              <PasswordManageButton scope="store" scopeLabel="매장" />
               <button className="btn primary" onClick={() => doPrint("summary")}>종합평가표 인쇄</button>
             </div>
           </div>

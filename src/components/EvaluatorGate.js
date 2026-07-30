@@ -4,18 +4,21 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-export default function EvaluatorGate({ title = "평가자 페이지", children }) {
+const LOGO_YOGIBO = "https://yogibo.kr/web/img/icon/logo3_on.png";
+
+// scope: "store"(매장) | "hq"(본사&물류) — 영역별로 비밀번호와 세션이 분리되어 있다.
+export default function EvaluatorGate({ title = "평가자 페이지", scope = "store", logo = LOGO_YOGIBO, children }) {
   const [state, setState] = useState("checking"); // checking | locked | open
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch(`/api/auth/me?scope=${scope}`)
       .then((r) => r.json())
       .then((d) => setState(d.authenticated ? "open" : "locked"))
       .catch(() => setState("locked"));
-  }, []);
+  }, [scope]);
 
   async function login(e) {
     e?.preventDefault();
@@ -26,7 +29,7 @@ export default function EvaluatorGate({ title = "평가자 페이지", children 
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw })
+        body: JSON.stringify({ scope, password: pw })
       });
       if (res.ok) {
         setState("open");
@@ -54,7 +57,7 @@ export default function EvaluatorGate({ title = "평가자 페이지", children 
     return (
       <main className="wrap narrow">
         <div className="card login-card">
-          <img className="brand-logo lg" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" style={{ marginBottom: 20 }} />
+          <img className="brand-logo lg" src={logo} alt="" style={{ marginBottom: 20 }} />
           <h1 style={{ fontSize: 23 }}>{title}</h1>
           <p>평가자 전용 페이지입니다. 비밀번호를 입력해 주세요.</p>
           <form onSubmit={login} style={{ marginTop: 18 }}>
@@ -83,7 +86,7 @@ export default function EvaluatorGate({ title = "평가자 페이지", children 
 }
 
 // 상단바용: 비밀번호 변경 + 로그아웃 (모달)
-export function PasswordManageButton() {
+export function PasswordManageButton({ scope = "store", scopeLabel = "매장" }) {
   const [open, setOpen] = useState(false);
   const [cur, setCur] = useState("");
   const [next, setNext] = useState("");
@@ -109,11 +112,11 @@ export function PasswordManageButton() {
       const res = await fetch("/api/auth/password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword: cur, newPassword: next.trim() })
+        body: JSON.stringify({ scope, currentPassword: cur, newPassword: next.trim() })
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) {
-        setMsg({ type: "ok", text: "비밀번호가 변경되었습니다. 다른 기기는 새 비밀번호로 다시 접속해야 합니다." });
+        setMsg({ type: "ok", text: `${scopeLabel} 비밀번호가 변경되었습니다. 다른 기기는 새 비밀번호로 다시 접속해야 합니다.` });
         setCur(""); setNext(""); setNext2("");
       } else {
         setMsg({ type: "err", text: d.error || "변경에 실패했습니다." });
@@ -126,7 +129,11 @@ export function PasswordManageButton() {
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope })
+    });
     location.reload();
   }
 
@@ -138,8 +145,10 @@ export function PasswordManageButton() {
       <div className="criteria-panel" style={{ width: "min(460px, 100%)" }}>
         <button className="btn ghost criteria-close" onClick={() => setOpen(false)}>닫기</button>
         <div style={{ paddingRight: 80, paddingBottom: 18, borderBottom: "1px solid #eaebee", marginBottom: 4 }}>
-          <h2 style={{ fontSize: 22, margin: 0 }}>평가자 비밀번호 관리</h2>
-          <p style={{ marginTop: 8 }}>모든 평가자 페이지에 공통으로 적용됩니다.</p>
+          <h2 style={{ fontSize: 22, margin: 0 }}>{scopeLabel} 비밀번호 관리</h2>
+          <p style={{ marginTop: 8 }}>
+            <b>{scopeLabel}</b> 평가 페이지에만 적용됩니다. 매장과 본사&물류의 비밀번호는 서로 분리되어 있습니다.
+          </p>
         </div>
         <div className="criteria-block">
           <label className="field"><span>현재 비밀번호</span>

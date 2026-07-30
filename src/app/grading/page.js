@@ -95,7 +95,7 @@ function GradingInner() {
             <button className="btn ghost" onClick={() => exportCSV(submissions, answerKey)}>CSV 다운로드</button>
             <button className="btn ghost" onClick={refresh}>{loading ? "불러오는 중..." : "새로고침"}</button>
             <button className="btn danger" onClick={deleteAll}>응시 전체 삭제</button>
-            <PasswordManageButton />
+            <PasswordManageButton scope="store" scopeLabel="매장" />
           </div>
         </div>
       </div>

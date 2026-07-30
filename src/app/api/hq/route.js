@@ -18,7 +18,7 @@ function pickFields(body) {
 // 본사&물류 수습기간 평가 목록
 export async function GET() {
   try {
-    await requireEvaluator();
+    await requireEvaluator("hq");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -34,7 +34,7 @@ export async function GET() {
 // 평가 작성
 export async function POST(req) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("hq");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

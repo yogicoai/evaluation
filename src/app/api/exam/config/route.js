@@ -7,7 +7,7 @@ import { DEFAULT_QUESTIONS, DEFAULT_ANSWER_KEY } from "@/lib/examDefaults";
 // 평가자: 문항 + 정답 전체 조회
 export async function GET() {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -17,7 +17,7 @@ export async function GET() {
 // 평가자: 문항/정답 저장 (부분 업데이트 허용)
 export async function PUT(req) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -36,7 +36,7 @@ export async function PUT(req) {
 // 평가자: 기본 시험지로 복원
 export async function DELETE() {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

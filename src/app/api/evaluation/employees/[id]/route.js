@@ -7,7 +7,7 @@ const ALLOWED_FIELDS = ["name", "store", "role", "period", "hr", "sales", "compe
 // 평가자: 대상자 부분 업데이트 (인사카드/매출/역량/기본정보)
 export async function PATCH(req, { params }) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -28,7 +28,7 @@ export async function PATCH(req, { params }) {
 // 평가자: 대상자 삭제
 export async function DELETE(req, { params }) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

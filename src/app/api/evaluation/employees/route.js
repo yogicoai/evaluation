@@ -5,7 +5,7 @@ import { requireEvaluator } from "@/lib/auth";
 // 평가자: 종합평가 대상자 목록
 export async function GET() {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -21,7 +21,7 @@ export async function GET() {
 // 평가자: 대상자 추가
 export async function POST(req) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

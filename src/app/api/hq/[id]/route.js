@@ -8,7 +8,7 @@ const FIELDS = ["dept", "rank", "name", "joinDate", "period", "evalDate", "score
 // 평가 수정
 export async function PATCH(req, { params }) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("hq");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -31,7 +31,7 @@ export async function PATCH(req, { params }) {
 // 평가 삭제
 export async function DELETE(req, { params }) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("hq");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

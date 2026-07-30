@@ -5,7 +5,7 @@ import { requireEvaluator } from "@/lib/auth";
 // 매출 평가 자동 산정: 오프라인 서버 주문 데이터 → 매장 기여도/개인 상대평가 표 생성
 export async function POST(req) {
   try {
-    await requireEvaluator();
+    await requireEvaluator("store");
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
