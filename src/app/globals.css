@@ -332,6 +332,8 @@ tbody tr:last-child td { border-bottom: 0; }
 /* ─── 종합평가 ─── */
 .weight-pill { display: flex; gap: 7px; flex-wrap: wrap; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(380px, .8fr); gap: 16px; margin-top: 16px; }
+/* 종합 대시보드: 리스트와 선택 직원 결과를 위아래 전체 폭으로 */
+.dashboard-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
 .employee-summary { display: grid; gap: 12px; }
 .employee-name { font-size: 26px; font-weight: 800; letter-spacing: -.04em; }
 .meta-line { color: var(--muted); font-size: 13px; line-height: 1.6; }
@@ -352,6 +354,17 @@ tbody tr:last-child td { border-bottom: 0; }
 .eval-table th { position: static; }
 .eval-table td { line-height: 1.55; }
 .grade-select { width: 76px; padding: 8px 9px; font-weight: 800; background: var(--line-soft); }
+/* 인사카드 등급 선택 — 버튼식 (본사&물류 평가표와 동일한 조작감) */
+.grade-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+.grade-btn {
+  min-width: 50px; padding: 7px 8px; border: 0; border-radius: 10px; background: var(--line-soft);
+  color: var(--text-sub); font-size: 13px; font-weight: 800; font-family: inherit; line-height: 1.25;
+  transition: background .12s, color .12s;
+}
+.grade-btn small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 700; }
+.grade-btn:hover { background: #e8ebee; }
+.grade-btn.on { background: var(--primary); color: #fff; }
+.grade-btn.on small { color: rgba(255, 255, 255, .8); }
 .grade-score { font-weight: 800; color: var(--primary-dark); text-align: center; font-variant-numeric: tabular-nums; }
 .category-cell { background: #f8fafb; font-weight: 800; color: var(--text-sub); min-width: 92px; }
 .total-row td { background: var(--primary-soft); font-weight: 800; border-bottom: 0; }
@@ -437,6 +450,51 @@ tbody tr:last-child td { border-bottom: 0; }
 .staff-pick-row:last-child { border-bottom: 0; }
 .staff-pick-row:hover { background: #f8fafb; }
 .staff-pick-row input { width: auto; accent-color: var(--primary); }
+
+/* ─── 기간 선택 바 (연도 · 월 · 분기) ─── */
+.periodbar {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255, 255, 255, .92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(2, 32, 71, .06);
+}
+.periodbar-inner {
+  max-width: 1600px; margin: 0 auto; padding: 14px 22px;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+}
+.periodbar .brand { flex: none; font-size: 18px; gap: 12px; letter-spacing: -.03em; }
+.periodbar .brand-logo { height: 28px; }
+.period-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.period-year {
+  width: auto; padding: 9px 30px 9px 13px; font-size: 14px; font-weight: 800;
+  background-color: var(--line-soft); border-radius: 11px; background-position: right 11px center;
+}
+.period-months { display: flex; gap: 2px; flex-wrap: wrap; }
+.period-chip {
+  min-width: 42px; padding: 9px 9px; border: 0; border-radius: 10px; background: transparent;
+  color: var(--text-sub); font-size: 14.5px; font-weight: 700; font-family: inherit; letter-spacing: -.02em;
+  transition: background .12s, color .12s;
+}
+.period-chip:hover { background: var(--line-soft); }
+.period-chip.on { background: var(--navy); color: #fff; }
+.period-chip.q { min-width: 38px; color: var(--muted); font-size: 13.5px; }
+.period-chip.q.on { background: var(--primary); color: #fff; }
+.period-sep { width: 1px; height: 20px; background: var(--line); margin: 0 2px; }
+.period-label { font-size: 13.5px; font-weight: 800; color: var(--muted); letter-spacing: -.02em; white-space: nowrap; }
+.period-toggle {
+  padding: 9px 13px; border: 0; border-radius: 10px; background: var(--line-soft);
+  color: var(--text-sub); font-size: 13.5px; font-weight: 700; font-family: inherit; white-space: nowrap;
+}
+.period-toggle:hover { background: #e8ebee; }
+.period-toggle.on { background: var(--primary-soft); color: var(--primary-dark); }
+.periodbar .btn { padding: 9px 13px; font-size: 13.5px; }
+.icon-btn {
+  width: 40px; height: 40px; display: grid; place-items: center; flex: none;
+  border: 0; border-radius: 11px; background: var(--line-soft); color: var(--text-sub); transition: background .12s;
+}
+.icon-btn:hover { background: #e8ebee; color: var(--text); }
+@media (max-width: 1100px) {
+  .period-controls { margin-left: 0; width: 100%; }
+}
 
 /* ─── 한글 날짜 선택기 ─── */
 .datepicker { position: relative; }

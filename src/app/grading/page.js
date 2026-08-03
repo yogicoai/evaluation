@@ -62,22 +62,25 @@ function GradingInner() {
     }
   }
 
-  // 응시 데이터 전체 삭제 (테스트 데이터 정리용 — 삭제 후 해당 직원들은 재응시 가능)
-  async function deleteAll() {
-    if (!submissions.length) {
-      alert("삭제할 응시 데이터가 없습니다.");
-      return;
-    }
-    if (!confirm(`제출된 응시 데이터 ${submissions.length}건을 모두 삭제하시겠습니까?\n삭제 후 해당 직원들은 재응시가 가능해집니다.`)) return;
-    if (!confirm("정말 전체 삭제를 진행하시겠습니까?")) return;
+  // 응시 데이터 삭제 — 개인별 / 선택 다건 공통.
+  // 복구가 불가능하므로 확인창에서 반드시 경고한다.
+  async function removeSubmissions(list) {
+    const rows = (Array.isArray(list) ? list : [list]).filter(Boolean);
+    if (!rows.length) return;
+
+    const who = rows.length === 1
+      ? `${rows[0].name}${rows[0].store ? ` (${rows[0].store})` : ""}님의 응시 데이터`
+      : `선택한 응시자 ${rows.length}명의 응시 데이터`;
+    if (!confirm(`${who}를 삭제하시겠습니까?\n\n⚠ 삭제한 데이터는 복원할 수 없습니다.\n답안·채점 결과가 모두 사라지며, 해당 직원은 다시 응시할 수 있게 됩니다.`)) return;
+
     let failed = 0;
-    for (const r of submissions) {
+    for (const r of rows) {
       const res = await fetch(`/api/exam/submissions/${r.submissionId}`, { method: "DELETE" });
       if (!res.ok) failed++;
     }
-    setSelectedId(null);
+    if (rows.some((r) => r.submissionId === selectedId)) setSelectedId(null);
     await refresh();
-    alert(failed ? `일부 삭제에 실패했습니다. (실패 ${failed}건)` : "전체 삭제되었습니다.");
+    alert(failed ? `일부 삭제에 실패했습니다. (실패 ${failed}건)` : "삭제되었습니다.");
   }
 
   const answerKey = config?.answerKey || {};
@@ -92,9 +95,8 @@ function GradingInner() {
           <div className="top-actions">
             <Link href="/" className="btn ghost">홈</Link>
             <Link href="/overall" className="btn ghost">수습 종합평가 →</Link>
-            <button className="btn ghost" onClick={() => exportCSV(submissions, answerKey)}>CSV 다운로드</button>
+{/* CSV 다운로드는 데이터 반출 방지를 위해 숨김 처리 (exportCSV 함수는 보존) */}
             <button className="btn ghost" onClick={refresh}>{loading ? "불러오는 중..." : "새로고침"}</button>
-            <button className="btn danger" onClick={deleteAll}>응시 전체 삭제</button>
             <PasswordManageButton scope="store" scopeLabel="매장" />
           </div>
         </div>
@@ -122,6 +124,8 @@ function GradingInner() {
             submissions={submissions}
             answerKey={answerKey}
             questions={questions}
+            onDelete={removeSubmissions}
+            onDeleteMany={removeSubmissions}
             selectedId={selectedId}
             setSelectedId={setSelectedId}
             onSaved={refresh}
@@ -137,7 +141,7 @@ function GradingInner() {
   );
 }
 
-function DashboardTab({ submissions, answerKey, questions, selectedId, setSelectedId, onSaved }) {
+function DashboardTab({ submissions, answerKey, questions, selectedId, setSelectedId, onSaved, onDelete, onDeleteMany }) {
   const [search, setSearch] = useState("");
   const [storeFilter, setStoreFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -183,6 +187,19 @@ function DashboardTab({ submissions, answerKey, questions, selectedId, setSelect
 
   const selected = submissions.find((x) => x.submissionId === selectedId);
 
+  // 선택 삭제용 체크박스 상태 — 목록이 바뀌면 사라진 항목은 자동으로 정리한다.
+  const [checkedIds, setCheckedIds] = useState([]);
+  const pageIds = pageRows.map((r) => r.submissionId);
+  const allChecked = pageIds.length > 0 && pageIds.every((id) => checkedIds.includes(id));
+  const toggleOne = (id) =>
+    setCheckedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAll = () =>
+    setCheckedIds((prev) => (allChecked ? prev.filter((id) => !pageIds.includes(id)) : [...new Set([...prev, ...pageIds])]));
+  useEffect(() => {
+    const alive = new Set(submissions.map((s) => s.submissionId));
+    setCheckedIds((prev) => prev.filter((id) => alive.has(id)));
+  }, [submissions]);
+
   return (
     <>
       <div className="kpis">
@@ -196,7 +213,14 @@ function DashboardTab({ submissions, answerKey, questions, selectedId, setSelect
       <section className="card" style={{ marginTop: 18 }}>
         <div className="panel-title">
           <div><h2>응시자 리스트</h2></div>
-          <span className="badge gray">{filtered.length ? `${filtered.length}명 · ${currentPage}/${totalPages} 페이지` : "0명"}</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {checkedIds.length > 0 && (
+              <button className="btn danger" onClick={() => onDeleteMany(submissions.filter((s) => checkedIds.includes(s.submissionId)))}>
+                선택 {checkedIds.length}건 삭제
+              </button>
+            )}
+            <span className="badge gray">{filtered.length ? `${filtered.length}명 · ${currentPage}/${totalPages} 페이지` : "0명"}</span>
+          </div>
         </div>
         <div className="toolbar">
           <input placeholder="이름/소속/직급 검색" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -215,15 +239,26 @@ function DashboardTab({ submissions, answerKey, questions, selectedId, setSelect
         <div className="table-wrap">
           <table>
             <colgroup>
-              <col style={{ width: 140 }} /><col style={{ width: 220 }} /><col style={{ width: 180 }} />
-              <col style={{ width: 90 }} /><col style={{ width: 90 }} /><col style={{ width: 90 }} /><col style={{ width: 110 }} />
+              <col style={{ width: 44 }} /><col style={{ width: 130 }} /><col style={{ width: 190 }} /><col style={{ width: 170 }} />
+              <col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 100 }} /><col style={{ width: 80 }} />
             </colgroup>
             <thead>
-              <tr><th>제출일</th><th>소속</th><th>이름 / 직급</th><th>자동</th><th>서술</th><th>총점</th><th>상태</th></tr>
+              <tr>
+                <th onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    style={{ width: "auto", accentColor: "var(--primary)" }}
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    title="현재 페이지 전체 선택"
+                  />
+                </th>
+                <th>제출일</th><th>소속</th><th>이름 / 직급</th><th>자동</th><th>서술</th><th>총점</th><th>상태</th><th>관리</th>
+              </tr>
             </thead>
             <tbody>
               {pageRows.length === 0 && (
-                <tr><td colSpan={7} className="empty-state">응시 데이터가 없습니다.</td></tr>
+                <tr><td colSpan={9} className="empty-state">응시 데이터가 없습니다.</td></tr>
               )}
               {pageRows.map((r) => {
                 const a = autoScore(r, answerKey).total;
@@ -232,6 +267,14 @@ function DashboardTab({ submissions, answerKey, questions, selectedId, setSelect
                 const st = statusOf(r, answerKey);
                 return (
                   <tr key={r.submissionId} className={selectedId === r.submissionId ? "selected" : ""} onClick={() => setSelectedId(r.submissionId)}>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        style={{ width: "auto", accentColor: "var(--primary)" }}
+                        checked={checkedIds.includes(r.submissionId)}
+                        onChange={() => toggleOne(r.submissionId)}
+                      />
+                    </td>
                     <td>{fmtDate(r.submittedAt)}</td>
                     <td><b>{r.store}</b></td>
                     <td><b>{r.name}</b><br /><span style={{ color: "#6b7280" }}>{r.role || ""}</span></td>
@@ -240,6 +283,9 @@ function DashboardTab({ submissions, answerKey, questions, selectedId, setSelect
                     <td><b style={{ fontSize: 16 }}>{f}</b></td>
                     <td>
                       {st === "pending" ? <span className="badge warn">미채점</span> : st === "pass" ? <span className="badge ok">합격</span> : <span className="badge danger">불합격</span>}
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn danger" style={{ padding: "7px 10px", fontSize: 12 }} onClick={() => onDelete(r)}>삭제</button>
                     </td>
                   </tr>
                 );
@@ -354,7 +400,7 @@ function SubmissionDetail({ record, answerKey, questions, onSaved }) {
   }
 
   async function deleteSubmission() {
-    if (!confirm(`${record.name} (${record.store}) 응시 데이터를 삭제하시겠습니까?\n삭제 후 해당 직원은 재응시가 가능해집니다.`)) return;
+    if (!confirm(`${record.name}${record.store ? ` (${record.store})` : ""}님의 응시 데이터를 삭제하시겠습니까?\n\n⚠ 삭제한 데이터는 복원할 수 없습니다.\n답안·채점 결과가 모두 사라지며, 해당 직원은 다시 응시할 수 있게 됩니다.`)) return;
     const res = await fetch(`/api/exam/submissions/${record.submissionId}`, { method: "DELETE" });
     if (res.ok) {
       alert("삭제되었습니다.");

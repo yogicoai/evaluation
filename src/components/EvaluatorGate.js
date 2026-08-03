@@ -7,18 +7,18 @@ import { createPortal } from "react-dom";
 const LOGO_YOGIBO = "https://yogibo.kr/web/img/icon/logo3_on.png";
 
 // scope: "store"(매장) | "hq"(본사&물류) — 영역별로 비밀번호와 세션이 분리되어 있다.
+// scope: "store"(매장) | "hq"(본사&물류) — 영역별로 비밀번호와 세션이 분리되어 있다.
+// 페이지에 들어올 때마다 항상 잠긴 상태에서 시작한다(자동 로그인 없음).
+// 인증 상태는 이 컴포넌트의 메모리에만 존재하므로 새로고침하면 다시 비밀번호를 받는다.
 export default function EvaluatorGate({ title = "평가자 페이지", scope = "store", logo = LOGO_YOGIBO, children }) {
-  const [state, setState] = useState("checking"); // checking | locked | open
+  const [state, setState] = useState("locked"); // locked | open
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    fetch(`/api/auth/me?scope=${scope}`)
-      .then((r) => r.json())
-      .then((d) => setState(d.authenticated ? "open" : "locked"))
-      .catch(() => setState("locked"));
-  }, [scope]);
+  // 진입 시 별도 정리 요청을 보내지 않는다.
+  // (로그인 응답보다 늦게 도착하면 방금 받은 세션 쿠키를 지워 버린다)
+  // 화면은 항상 locked 상태로 시작하고, 로그인하면 쿠키가 새로 발급된다.
 
   async function login(e) {
     e?.preventDefault();
@@ -45,21 +45,13 @@ export default function EvaluatorGate({ title = "평가자 페이지", scope = "
     }
   }
 
-  if (state === "checking") {
-    return (
-      <main className="wrap">
-        <p style={{ textAlign: "center", marginTop: 140, color: "#8b95a1", fontWeight: 600 }}>확인 중...</p>
-      </main>
-    );
-  }
-
   if (state === "locked") {
     return (
       <main className="wrap narrow">
         <div className="card login-card">
           <img className="brand-logo lg" src={logo} alt="" style={{ marginBottom: 20 }} />
           <h1 style={{ fontSize: 23 }}>{title}</h1>
-          <p>평가자 전용 페이지입니다. 비밀번호를 입력해 주세요.</p>
+          <p>평가자 전용 페이지입니다. 접속할 때마다 비밀번호를 입력해야 하며, 로그인 상태는 저장되지 않습니다.</p>
           <form onSubmit={login} style={{ marginTop: 18 }}>
             <label className="field"><span>비밀번호</span>
               <input

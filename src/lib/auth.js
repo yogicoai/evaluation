@@ -3,11 +3,15 @@
 //   hq    : 본사&물류(요기코퍼레이션) — /hq
 // 비밀번호 해시는 app_settings 컬렉션에 영역별로 저장하고, 세션 쿠키도 영역별로 분리한다.
 // 세션 토큰은 현재 해시에서 파생되므로 비밀번호를 바꾸면 그 영역의 기존 세션만 무효화된다.
+//
+// 쿠키는 만료 시각이 없는 세션 쿠키로만 발급한다(디스크에 저장되지 않고 브라우저를 닫으면 사라짐).
+// 화면 쪽에서도 페이지에 들어올 때마다 항상 비밀번호를 다시 받으므로 자동 로그인은 일어나지 않는다.
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { getDb } from "./mongodb.js";
 
-export const SESSION_MAX_AGE = 60 * 60 * 24 * 3; // 3일
+// 세션 쿠키 공통 옵션 — maxAge/expires를 주지 않는 것이 핵심
+export const SESSION_COOKIE_OPTIONS = { httpOnly: true, sameSite: "lax", path: "/" };
 const SETTINGS_COLLECTION = "app_settings";
 
 export const SCOPES = {

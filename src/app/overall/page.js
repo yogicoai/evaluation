@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import DatePicker from "@/components/DatePicker";
+import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
 import { normalize } from "@/lib/scoring";
 import { HR_ITEMS, GRADE_SCORE, matchName, parseNumberValue, isSalesExcluded } from "@/lib/salesEval";
 import { calculateTotal, calculateCompetency, completion, matchExam, fmtNum, fmtMoney, fmtPct, formatRawCell } from "@/lib/overallCalc";
@@ -33,9 +34,14 @@ function OverallInner() {
   const [answerKey, setAnswerKey] = useState({});
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("overview");
-  const [modal, setModal] = useState(null); // overall | hr | sales | staff
+  const [modal, setModal] = useState(null); // overall | hr | sales | staff | settings
   const [printMode, setPrintMode] = useState("summary");
   const [loading, setLoading] = useState(false);
+
+  // 상단 기간 선택 (대상자 등록일 기준 조회)
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [months, setMonths] = useState([]); // 빈 배열 = 해당 연도 전체
+  const [multiMonth, setMultiMonth] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -76,6 +82,12 @@ function OverallInner() {
   }
 
   const selected = employees.find((e) => e.id === selectedId) || null;
+
+  // 상단에서 고른 연/월(분기)에 등록된 대상자만 대시보드에 보여준다.
+  const periodEmployees = useMemo(
+    () => employees.filter((e) => inPeriod(e.createdAt, year, months)),
+    [employees, year, months]
+  );
 
   async function addEmployee() {
     const name = prompt("직원 이름을 입력해 주세요.");
@@ -164,34 +176,25 @@ function OverallInner() {
     setTimeout(() => window.print(), 120);
   }
 
-  // 평가 대상자 삭제 (해당 직원의 인사카드·매출·역량 평가가 함께 삭제됨)
-  async function deleteEmployee(emp) {
-    if (!emp) return;
-    if (!confirm(`${emp.name}${emp.store ? ` (${emp.store})` : ""}님에 대한 수습 평가 삭제를 진행하시겠습니까?\n인사카드·매출·역량 평가 내용이 모두 삭제되며 복구할 수 없습니다.`)) return;
-    const res = await fetch(`/api/evaluation/employees/${emp.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      alert("삭제에 실패했습니다.");
-      return;
-    }
-    await loadAll();
-    alert("삭제되었습니다.");
-  }
+  // 평가 대상자 삭제 — 개인별 / 선택 다건 공통.
+  // 인사카드·매출·역량 평가가 함께 사라지고 복구할 수 없으므로 확인창에서 경고한다.
+  async function deleteEmployee(list) {
+    const rows = (Array.isArray(list) ? list : [list]).filter(Boolean);
+    if (!rows.length) return;
 
-  // 평가 대상자 전체 삭제 (테스트 데이터 정리용)
-  async function deleteAllEmployees() {
-    if (!employees.length) {
-      alert("삭제할 평가 대상자가 없습니다.");
-      return;
-    }
-    if (!confirm(`등록된 수습 평가 ${employees.length}건을 모두 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.`)) return;
-    if (!confirm("정말 전체 삭제를 진행하시겠습니까?")) return;
+    const who = rows.length === 1
+      ? `${rows[0].name}${rows[0].store ? ` (${rows[0].store})` : ""}님의 수습 평가`
+      : `선택한 대상자 ${rows.length}명의 수습 평가`;
+    if (!confirm(`${who}를 삭제하시겠습니까?\n\n⚠ 삭제한 데이터는 복원할 수 없습니다.\n인사카드·매출·역량 평가 내용이 모두 사라집니다.`)) return;
+
     let failed = 0;
-    for (const e of employees) {
+    for (const e of rows) {
       const res = await fetch(`/api/evaluation/employees/${e.id}`, { method: "DELETE" });
       if (!res.ok) failed++;
     }
+    if (rows.some((e) => e.id === selectedId)) setSelectedId(null);
     await loadAll();
-    alert(failed ? `일부 삭제에 실패했습니다. (실패 ${failed}건)` : "전체 삭제되었습니다.");
+    alert(failed ? `일부 삭제에 실패했습니다. (실패 ${failed}건)` : "삭제되었습니다.");
   }
 
   function exportCSV() {
@@ -212,41 +215,51 @@ function OverallInner() {
   return (
     <>
       <div className="app-screen">
-        <div className="topbar no-print">
-          <div className="topbar-inner" style={{ maxWidth: 1520 }}>
-            <div className="brand"><img className="brand-logo" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" /><div>수습 종합평가</div></div>
-            <div className="top-actions">
-              <Link href="/" className="btn ghost">홈</Link>
-              <Link href="/grading" className="btn ghost">수습평가시험 관리 →</Link>
-              <button className="btn ghost" onClick={exportCSV}>CSV 다운로드</button>
-              <button className="btn ghost" onClick={() => doPrint("hr")}>인사카드 인쇄</button>
-              <button className="btn ghost" onClick={() => doPrint("sales")}>매출 평가 인쇄</button>
-              <PasswordManageButton scope="store" scopeLabel="매장" />
-              <button className="btn primary" onClick={() => doPrint("summary")}>종합평가표 인쇄</button>
-            </div>
-          </div>
-        </div>
+        {/* 상단: 연도 · 월 · 분기 기간 선택 + 평가 지침 + 설정(톱니바퀴) */}
+        <PeriodBar
+          className="no-print"
+          title="수습 종합평가"
+          logo="https://yogibo.kr/web/img/icon/logo3_on.png"
+          year={year}
+          onYearChange={setYear}
+          months={months}
+          onMonthsChange={setMonths}
+          multi={multiMonth}
+          onMultiChange={setMultiMonth}
+          right={
+            <>
+              <Link href="/grading" className="btn ghost">시험 관리 →</Link>
+              <button className="btn ghost" onClick={() => setModal("overall")}>평가 지침</button>
+              <button className="icon-btn" onClick={() => setModal("settings")} title="설정 및 인쇄" aria-label="설정 및 인쇄">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </>
+          }
+        />
 
         <main className="wrap" style={{ maxWidth: 1520 }}>
           <section style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-end", flexWrap: "wrap" }}>
             <div>
               <h1>수습직원 종합 평가 대시보드</h1>
-              <p>인사카드 평가 · 매출 평가 · 역량평가를 하나의 기준으로 합산합니다. 매출 평가는 오프라인 서버(ERP) 주문 데이터를 자동 연동해 산정합니다.</p>
+              <p>
+                인사카드 평가 · 매출 평가 · 역량평가를 하나의 기준으로 합산합니다.
+                <br />조회 기간: <b>{periodLabel(year, months)}</b> · 대상자 등록일 기준
+              </p>
             </div>
-            <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-              <button className="btn ghost" onClick={() => setModal("overall")}>종합 평가 기준</button>
-              <div className="weight-pill">
-                <span className="pill">인사카드 <b>20%</b></span>
-                <span className="pill">매출 <b>50%</b></span>
-                <span className="pill">역량평가 <b>30%</b></span>
-              </div>
+            <div className="weight-pill">
+              <span className="pill">인사카드 <b>20%</b></span>
+              <span className="pill">매출 <b>50%</b></span>
+              <span className="pill">역량평가 <b>30%</b></span>
             </div>
           </section>
 
-          <Kpis employees={employees} exams={exams} answerKey={answerKey} selected={selected} />
+          <Kpis employees={periodEmployees} exams={exams} answerKey={answerKey} selected={selected} />
 
           <nav className="tabs">
-            {[["overview", "종합 대시보드"], ["hr", "1. 인사카드 평가"], ["sales", "2. 매출 평가"], ["competency", "3. 역량평가 연동"], ["settings", "기준 및 데이터 관리"]].map(([k, label]) => (
+            {[["overview", "0. 종합 대시보드"], ["hr", "1. 인사카드 평가"], ["sales", "2. 매출 평가"], ["competency", "3. 역량평가 연동"], ["settings", "4. 기준 및 데이터 관리"]].map(([k, label]) => (
               <button key={k} className={"tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
             ))}
             <button className="btn ghost" style={{ marginLeft: "auto" }} onClick={loadAll}>{loading ? "불러오는 중..." : "새로고침"}</button>
@@ -254,23 +267,30 @@ function OverallInner() {
 
           {tab === "overview" && (
             <OverviewTab
-              employees={employees} exams={exams} answerKey={answerKey}
+              employees={periodEmployees} exams={exams} answerKey={answerKey}
               selectedId={selectedId} setSelectedId={setSelectedId}
               addEmployee={addEmployee} importFromExam={importFromExam}
               openStaffModal={() => setModal("staff")} setTab={setTab}
-              onDelete={deleteEmployee} onDeleteAll={deleteAllEmployees}
+              onDelete={deleteEmployee} onDeleteMany={deleteEmployee}
             />
           )}
           {tab === "hr" && <HrTab emp={selected} saveEmployee={saveEmployee} openCriteria={() => setModal("hr")} />}
           {tab === "sales" && <SalesTab emp={selected} exams={exams} answerKey={answerKey} saveEmployee={saveEmployee} openCriteria={() => setModal("sales")} />}
           {tab === "competency" && <CompetencyTab emp={selected} exams={exams} answerKey={answerKey} saveEmployee={saveEmployee} syncCompetency={syncCompetency} />}
-          {tab === "settings" && <SettingsTab emp={selected} saveEmployee={saveEmployee} onDelete={() => deleteEmployee(selected)} onDeleteAll={deleteAllEmployees} count={employees.length} />}
+          {tab === "settings" && <SettingsTab emp={selected} saveEmployee={saveEmployee} onDelete={() => deleteEmployee(selected)} count={employees.length} />}
         </main>
 
         {modal === "overall" && <OverallCriteriaModal onClose={() => setModal(null)} />}
         {modal === "hr" && <HrCriteriaModal onClose={() => setModal(null)} />}
         {modal === "sales" && <SalesCriteriaModal onClose={() => setModal(null)} />}
         {modal === "staff" && <StaffPickModal onClose={() => setModal(null)} onAdd={addFromStaff} />}
+        {modal === "settings" && (
+          <SettingsModal
+            onClose={() => setModal(null)}
+            selected={selected}
+            onPrint={(mode) => { setModal(null); doPrint(mode); }}
+          />
+        )}
       </div>
 
       {selected && <PrintSheet mode={printMode} emp={selected} exams={exams} answerKey={answerKey} />}
@@ -294,12 +314,12 @@ function Kpis({ employees, exams, answerKey, selected }) {
       <div className="kpi"><div className="label">평가 대상자</div><div className="val">{n}</div><div className="sub">종합평가 등록 기준</div></div>
       <div className="kpi"><div className="label">평균 종합점수</div><div className="val">{fmtNum(avg, 1)}</div><div className="sub">3개 항목 반영 기준</div></div>
       <div className="kpi"><div className="label">매출 데이터 반영</div><div className="val">{salesLoaded}</div><div className="sub">자동 산정 완료 인원</div></div>
-      <div className="kpi"><div className="label">평가 진행률</div><div className="val">{n ? Math.round((done / n) * 100) : 0}%</div><div className="sub">3개 항목 입력 완료</div></div>
+      <div className="kpi"><div className="label">정규직 전환</div><div className="val">{done}</div><div className="sub">3개 항목 입력 완료 기준</div></div>
     </section>
   );
 }
 
-function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, addEmployee, importFromExam, openStaffModal, setTab, onDelete, onDeleteAll }) {
+function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, addEmployee, importFromExam, openStaffModal, setTab, onDelete, onDeleteMany }) {
   const [search, setSearch] = useState("");
   const [storeFilter, setStoreFilter] = useState("");
   const [progFilter, setProgFilter] = useState("");
@@ -325,15 +345,36 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
   const rows = filtered.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE);
   const selected = employees.find((e) => e.id === selectedId);
 
+  // 선택 삭제용 체크박스 — 목록이 바뀌면 사라진 항목은 자동으로 정리한다.
+  const [checkedIds, setCheckedIds] = useState([]);
+  const pageIds = rows.map((e) => e.id);
+  const allChecked = pageIds.length > 0 && pageIds.every((id) => checkedIds.includes(id));
+  const toggleOne = (id) =>
+    setCheckedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAll = () =>
+    setCheckedIds((prev) => (allChecked ? prev.filter((id) => !pageIds.includes(id)) : [...new Set([...prev, ...pageIds])]));
+  useEffect(() => {
+    const alive = new Set(employees.map((e) => e.id));
+    setCheckedIds((prev) => prev.filter((id) => alive.has(id)));
+  }, [employees]);
+
+  // 대상자 리스트와 선택 직원 종합 결과를 각각 가로 100%로 배치한다.
   return (
-    <div className="dashboard-grid">
+    <div className="dashboard-stack">
       <section className="card">
         <div className="panel-title">
           <div>
             <h2>평가 대상자 리스트</h2>
             <p>시험 채점이 완료(합격/불합격 확정)되면 응시자가 이 목록에 자동으로 등록됩니다. 대상을 선택해 평가를 진행하세요.</p>
           </div>
-          <span className="badge gray">{filtered.length ? `${filtered.length}명 · ${cur}/${pages} 페이지` : "0명"}</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {checkedIds.length > 0 && (
+              <button className="btn danger" onClick={() => onDeleteMany(employees.filter((e) => checkedIds.includes(e.id)))}>
+                선택 {checkedIds.length}명 삭제
+              </button>
+            )}
+            <span className="badge gray">{filtered.length ? `${filtered.length}명 · ${cur}/${pages} 페이지` : "0명"}</span>
+          </div>
         </div>
         <div className="toolbar" style={{ gridTemplateColumns: "1.4fr 1fr 1fr auto auto auto" }}>
           <input placeholder="이름·소속·직급 검색" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -343,33 +384,51 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
           </select>
           <select value={progFilter} onChange={(e) => { setProgFilter(e.target.value); setPage(1); }}>
             <option value="">전체 진행 상태</option>
-            <option value="complete">평가완료</option>
+            <option value="complete">정규직 전환</option>
             <option value="pending">입력 진행 중</option>
           </select>
           <button className="btn ghost" onClick={openStaffModal}>스태프에서 추가</button>
           <button className="btn ghost" onClick={importFromExam}>미채점 응시자 불러오기</button>
           <button className="btn ghost" onClick={addEmployee}>직접 추가</button>
-          <button className="btn danger" onClick={onDeleteAll}>전체 삭제</button>
         </div>
         <div className="table-wrap" style={{ maxHeight: 540 }}>
           <table>
             <thead>
-              <tr><th>소속</th><th>이름 / 직급</th><th>인사카드</th><th>매출</th><th>역량</th><th>종합</th><th>상태</th><th>관리</th></tr>
+              <tr>
+                <th style={{ width: 44 }} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    style={{ width: "auto", accentColor: "var(--primary)" }}
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    title="현재 페이지 전체 선택"
+                  />
+                </th>
+                <th>소속</th><th>이름 / 직급</th><th>인사카드</th><th>매출</th><th>역량</th><th>종합</th><th>상태</th><th>관리</th>
+              </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={8} className="empty-state">등록된 대상자가 없습니다.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={9} className="empty-state">등록된 대상자가 없습니다.</td></tr>}
               {rows.map((e) => {
                 const r = calculateTotal(e, exams, answerKey);
                 const c = completion(e, exams, answerKey);
                 return (
                   <tr key={e.id} className={e.id === selectedId ? "selected" : ""} onClick={() => setSelectedId(e.id)}>
+                    <td onClick={(ev) => ev.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        style={{ width: "auto", accentColor: "var(--primary)" }}
+                        checked={checkedIds.includes(e.id)}
+                        onChange={() => toggleOne(e.id)}
+                      />
+                    </td>
                     <td style={{ whiteSpace: "nowrap" }}>{e.store || "-"}</td>
                     <td><b>{e.name}</b><br /><span style={{ color: "#6b7280" }}>{e.role || "-"}</span></td>
                     <td>{r.hr.raw} / 100</td>
                     <td>{r.sales.excluded ? <span style={{ color: "#8b95a1" }}>제외</span> : `${fmtNum(r.sales.total, 0)} / 50`}</td>
                     <td>{fmtNum(r.comp.raw, 0)} / 100</td>
                     <td><b style={{ fontSize: 16 }}>{fmtNum(r.total, 1)}</b></td>
-                    <td>{c.done ? <span className="badge ok">완료</span> : <span className="badge warn">진행 중</span>}</td>
+                    <td>{c.done ? <span className="badge ok">정규직 전환</span> : <span className="badge warn">진행 중</span>}</td>
                     <td onClick={(ev) => ev.stopPropagation()}>
                       <button className="btn danger" style={{ padding: "8px 11px", fontSize: 12 }} onClick={() => onDelete(e)}>삭제</button>
                     </td>
@@ -435,8 +494,9 @@ function SummaryPanel({ emp, exams, answerKey, setTab }) {
         {items.map((x) => (
           <div key={x[0]} className="break-row">
             <div className="name">{x[0]}<br /><span style={{ fontSize: 11, color: "#6b7280" }}>{x[1]}</span></div>
-            <div className="barline"><span className={x[4]} style={{ width: `${Math.min(100, (x[2] / x[3]) * 100)}%` }} /></div>
-            <div className="value">{fmtNum(x[2], 1)} / {x[3]}</div>
+            {/* 만점이 0인 항목(매출 평가 제외)은 게이지를 채우지 않는다 */}
+            <div className="barline"><span className={x[4]} style={{ width: x[3] > 0 ? `${Math.min(100, (x[2] / x[3]) * 100)}%` : "0%" }} /></div>
+            <div className="value">{x[3] > 0 ? `${fmtNum(x[2], 1)} / ${x[3]}` : "제외"}</div>
           </div>
         ))}
       </div>
@@ -483,18 +543,27 @@ function HrTab({ emp, saveEmployee, openCriteria }) {
       <div className="eval-table-wrap">
         <table className="eval-table">
           <thead>
-            <tr><th style={{ width: 105 }}>평가 영역</th><th>평가 내용</th><th style={{ width: 115 }}>평가</th><th style={{ width: 72 }}>배점</th><th style={{ width: 75 }}>점수</th></tr>
+            <tr><th style={{ width: 105 }}>평가 영역</th><th>평가 내용</th><th style={{ width: 300 }}>평가</th><th style={{ width: 72 }}>배점</th><th style={{ width: 75 }}>점수</th></tr>
           </thead>
           <tbody>
             {HR_ITEMS.map((item, i) => (
               <tr key={i} style={{ cursor: "default" }}>
                 <td className="category-cell">{item.category}</td>
                 <td>{item.content}</td>
+                {/* 등급은 select 대신 버튼으로 고른다 (본사&물류 평가표와 동일한 방식) */}
                 <td>
-                  <select className="grade-select" value={grades[i] || ""} onChange={(e) => setGrade(i, e.target.value)}>
-                    <option value="">-</option>
-                    {["A", "B", "C", "D", "F"].map((g) => <option key={g} value={g}>{g}</option>)}
-                  </select>
+                  <div className="grade-btns">
+                    {["A", "B", "C", "D", "F"].map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        className={"grade-btn" + (grades[i] === g ? " on" : "")}
+                        onClick={() => setGrade(i, grades[i] === g ? "" : g)}
+                      >
+                        {g}<small>{GRADE_SCORE[g]}점</small>
+                      </button>
+                    ))}
+                  </div>
                 </td>
                 <td style={{ textAlign: "center" }}>10</td>
                 <td className="grade-score">{GRADE_SCORE[grades[i]] ?? 0}</td>
@@ -930,7 +999,7 @@ function CompetencyTab({ emp, exams, answerKey, saveEmployee, syncCompetency }) 
   );
 }
 
-function SettingsTab({ emp, saveEmployee, onDelete, onDeleteAll, count }) {
+function SettingsTab({ emp, saveEmployee, onDelete, count }) {
   const [form, setForm] = useState({ name: "", store: "", role: "수습", period: "", finalMemo: "" });
   useEffect(() => {
     setForm({
@@ -996,11 +1065,10 @@ function SettingsTab({ emp, saveEmployee, onDelete, onDeleteAll, count }) {
           <b>평가 데이터 삭제</b>
           <span>
             잘못 진행한 평가는 항목별로 초기화하거나(인사카드·매출 탭), 대상자 단위로 삭제할 수 있습니다.
-            전체 삭제는 등록된 평가 {count ?? 0}건을 모두 지웁니다.
+            여러 명을 한 번에 지우려면 <b>종합 대시보드</b>의 리스트에서 체크박스로 선택한 뒤 삭제하세요. (현재 등록 {count ?? 0}건)
           </span>
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
             <button className="btn danger" onClick={onDelete}>선택 직원 삭제</button>
-            <button className="btn danger" onClick={onDeleteAll}>전체 삭제 ({count ?? 0}건)</button>
           </div>
         </div>
       </aside>
@@ -1020,6 +1088,40 @@ function Modal({ title, subtitle, chip, children, onClose }) {
           {chip && <div className="badge blue" style={{ marginTop: 12 }}>{chip}</div>}
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+// ---- 설정 및 인쇄 (톱니바퀴) ----
+function SettingsModal({ onClose, selected, onPrint }) {
+  const who = selected ? `${selected.name}${selected.store ? ` · ${selected.store}` : ""}` : null;
+  return (
+    <div className="criteria-modal no-print" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="criteria-panel" style={{ width: "min(520px, 100%)" }}>
+        <button className="btn ghost criteria-close" onClick={onClose}>닫기</button>
+        <div style={{ paddingRight: 80, paddingBottom: 18, borderBottom: "1px solid #eaebee", marginBottom: 4 }}>
+          <h2 style={{ fontSize: 22, margin: 0 }}>설정 및 인쇄</h2>
+          <p style={{ marginTop: 8 }}>평가표 인쇄와 비밀번호 관리를 여기서 처리합니다.</p>
+        </div>
+
+        <div className="criteria-block">
+          <h3 style={{ fontSize: 15, marginBottom: 6 }}>평가표 인쇄 (PDF 저장)</h3>
+          <p className="subtle" style={{ marginBottom: 12 }}>
+            {who ? <>선택 직원: <b>{who}</b></> : "인쇄하려면 먼저 대시보드에서 직원을 선택해 주세요."}
+          </p>
+          <div style={{ display: "grid", gap: 8 }}>
+            <button className="btn primary" disabled={!selected} onClick={() => onPrint("summary")}>종합평가표 인쇄</button>
+            <button className="btn ghost" disabled={!selected} onClick={() => onPrint("hr")}>인사카드 평가표 인쇄</button>
+            <button className="btn ghost" disabled={!selected} onClick={() => onPrint("sales")}>매출 평가표 인쇄</button>
+          </div>
+        </div>
+
+        <div className="criteria-block">
+          <h3 style={{ fontSize: 15, marginBottom: 6 }}>보안</h3>
+          <p className="subtle" style={{ marginBottom: 12 }}>매장 평가 페이지의 접속 비밀번호를 변경합니다.</p>
+          <PasswordManageButton scope="store" scopeLabel="매장" />
+        </div>
       </div>
     </div>
   );

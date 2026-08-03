@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   requireEvaluator, verifyPassword, setPassword, currentSessionToken, masterSessionToken,
-  cookieNameFor, normalizeScope, SCOPES, SESSION_MAX_AGE
+  cookieNameFor, normalizeScope, SCOPES, SESSION_COOKIE_OPTIONS
 } from "@/lib/auth";
 
 // 평가자 비밀번호 변경 — 해당 영역(store/hq)에 로그인된 상태 + 현재 비밀번호 확인 필요
@@ -33,11 +33,6 @@ export async function POST(req) {
 
   // 변경 직후 현재 브라우저는 새 세션 쿠키로 갱신 (다른 기기의 기존 세션은 무효화됨)
   const res = NextResponse.json({ ok: true, scope, label: SCOPES[scope].label });
-  res.cookies.set(cookieName, wasMaster ? master : await currentSessionToken(scope), {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: SESSION_MAX_AGE,
-    path: "/"
-  });
+  res.cookies.set(cookieName, wasMaster ? master : await currentSessionToken(scope), SESSION_COOKIE_OPTIONS);
   return res;
 }
