@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
+import PopupExpandButton from "@/components/PopupExpandButton";
 import { openPopup } from "@/lib/popup";
 import { autoScore, finalScore, statusOf, scoreQuestion, normalize } from "@/lib/scoring";
 import { QUESTION_LABELS, QUESTION_SCORES, AUTO_QUESTION_IDS, PASS_SCORE } from "@/lib/examDefaults";
@@ -114,6 +115,7 @@ function GradingInner() {
         onRangeChange={setRange}
         right={
           <>
+            <PopupExpandButton />
             <button className="btn ghost" onClick={refresh}>{loading ? "불러오는 중..." : "새로고침"}</button>
             <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="설정" aria-label="설정">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">

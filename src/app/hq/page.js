@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import DateTextInput from "@/components/DateTextInput";
 import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
+import PopupExpandButton from "@/components/PopupExpandButton";
 import { HQ_COMPANY, HQ_CATEGORIES, HQ_ITEMS, HQ_SCALE_LABELS, HQ_TOTAL_MAX, HQ_GRADE_CRITERIA, hqTotal, hqAnsweredCount, hqGrade } from "@/lib/hqForm";
 
 const LOGO = "https://www.yogico.kr/img/coMake2.png";
@@ -156,6 +157,7 @@ function HqInner() {
           onRangeChange={setRange}
           right={
             <>
+              <PopupExpandButton />
               <button className="btn ghost" onClick={load}>{loading ? "불러오는 중..." : "새로고침"}</button>
               <button className="btn ghost" onClick={() => setGuideOpen(true)}>평가 지침</button>
               {mode === "form" && <button className="btn ghost" onClick={() => setMode("list")}>← 목록으로</button>}

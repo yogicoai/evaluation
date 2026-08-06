@@ -5,6 +5,7 @@ import Link from "next/link";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import DatePicker from "@/components/DatePicker";
 import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
+import PopupExpandButton from "@/components/PopupExpandButton";
 import { normalize } from "@/lib/scoring";
 import { openPopup } from "@/lib/popup";
 import { HR_ITEMS, GRADE_SCORE, matchName, parseNumberValue, isSalesExcluded } from "@/lib/salesEval";
@@ -232,6 +233,7 @@ function OverallInner() {
           onRangeChange={setRange}
           right={
             <>
+              <PopupExpandButton />
               <button className="btn ghost" onClick={loadAll}>{loading ? "불러오는 중..." : "새로고침"}</button>
               <button className="btn ghost" onClick={() => setModal("overall")}>평가 지침</button>
               <button className="icon-btn" onClick={() => setModal("settings")} title="설정 및 인쇄" aria-label="설정 및 인쇄">

@@ -3,23 +3,26 @@
 // 메인: 오프라인 통합관리 화면과 같은 사이드바 + 메인 레이아웃
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { openPopup } from "@/lib/popup";
 
 const LOGO_YOGIBO = "https://yogibo.kr/web/img/icon/logo3_on.png";
 const LOGO_YOGICO = "https://www.yogico.kr/img/coMake2.png";
 
+// popup: 평가자용 화면은 팝업 창으로 띄운다(여러 화면을 오가도 보던 화면이 남는다).
+// 직원용 시험은 응시자가 쓰는 화면이라 같은 창에서 이동한다.
 const MENU = [
   {
     title: "요기보 · 매장",
     items: [
       { label: "수습평가시험", href: "/exam", desc: "매장 직원이 응시하는 역량평가 시험", role: "직원용", icon: "pen" },
-      { label: "수습평가시험 관리", href: "/grading", desc: "제출된 시험지 자동/수동 채점, 문항·정답 관리", role: "평가자용", icon: "check" },
-      { label: "수습 종합평가", href: "/overall", desc: "인사카드 + 매출 + 역량 합산 및 PDF 출력", role: "평가자용", icon: "chart" }
+      { label: "수습평가시험 관리", href: "/grading", desc: "제출된 시험지 자동/수동 채점, 문항·정답 관리", role: "평가자용", icon: "check", popup: "yogibo_grading" },
+      { label: "수습 종합평가", href: "/overall", desc: "인사카드 + 매출 + 역량 합산 및 PDF 출력", role: "평가자용", icon: "chart", popup: "yogibo_overall" }
     ]
   },
   {
     title: "요기코퍼레이션 · 본사&물류",
     items: [
-      { label: "수습기간 평가표", href: "/hq", desc: "본사·물류 수습직원 평가표 작성 및 PDF 출력", role: "평가자용", icon: "doc" }
+      { label: "수습기간 평가표", href: "/hq", desc: "본사·물류 수습직원 평가표 작성 및 PDF 출력", role: "평가자용", icon: "doc", popup: "yogibo_hq" }
     ]
   }
 ];
@@ -35,7 +38,12 @@ function Icon({ name }) {
 export default function Home() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const flat = MENU.flatMap((g) => g.items);
+
+  function go(item) {
+    setOpen(false);
+    if (item.popup) openPopup(item.href, item.popup);
+    else router.push(item.href);
+  }
 
   return (
     <div className="hub">
@@ -49,7 +57,7 @@ export default function Home() {
             <div key={g.title} className="hub-nav-group">
               <div className="hub-nav-title">{g.title}</div>
               {g.items.map((it) => (
-                <button key={it.href} className="hub-nav-item" onClick={() => router.push(it.href)}>
+                <button key={it.href} className="hub-nav-item" onClick={() => go(it)}>
                   <Icon name={it.icon} />
                   <span>{it.label}</span>
                 </button>
@@ -86,7 +94,7 @@ export default function Home() {
               <div className="hub-section-title">{g.title}</div>
               <div className="hub-cards">
                 {g.items.map((it) => (
-                  <button key={it.href} className="hub-card" onClick={() => router.push(it.href)}>
+                  <button key={it.href} className="hub-card" onClick={() => go(it)}>
                     <div className="hub-card-top">
                       <span className="hub-card-icon"><Icon name={it.icon} /></span>
                       <span className={"badge " + (it.role === "직원용" ? "blue" : "gray")}>{it.role}</span>

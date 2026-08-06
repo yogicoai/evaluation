@@ -20,3 +20,20 @@ export function openPopup(url, name = "yogibo_eval") {
   }
   win.focus();
 }
+
+// 지금 창이 팝업으로 열린 것인지
+export function isPopupWindow() {
+  if (typeof window === "undefined") return false;
+  try {
+    return !!window.opener && !window.opener.closed;
+  } catch {
+    return false;
+  }
+}
+
+// 팝업 내용을 일반 탭으로 옮기고 팝업은 닫는다
+export function expandToFullPage() {
+  if (typeof window === "undefined") return;
+  window.open(window.location.href, "_blank");
+  window.close();
+}
