@@ -6,6 +6,7 @@ import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate"
 import DatePicker from "@/components/DatePicker";
 import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
 import { normalize } from "@/lib/scoring";
+import { openPopup } from "@/lib/popup";
 import { HR_ITEMS, GRADE_SCORE, matchName, parseNumberValue, isSalesExcluded } from "@/lib/salesEval";
 import { calculateTotal, calculateCompetency, completion, matchExam, fmtNum, fmtMoney, fmtPct, formatRawCell } from "@/lib/overallCalc";
 
@@ -1119,11 +1120,13 @@ function SettingsModal({ onClose, selected, onPrint }) {
           <p style={{ marginTop: 8 }}>페이지 이동, 평가표 인쇄, 비밀번호 관리를 여기서 처리합니다.</p>
         </div>
 
+        {/* 팝업 창으로 연다 — 보던 화면이 그대로 남아 다시 로그인할 필요가 없다 */}
         <div className="criteria-block">
-          <h3 style={{ fontSize: 15, marginBottom: 10 }}>페이지 이동</h3>
+          <h3 style={{ fontSize: 15, marginBottom: 6 }}>페이지 이동</h3>
+          <p className="subtle" style={{ marginBottom: 12 }}>팝업 창으로 열립니다. 지금 보던 화면은 그대로 유지됩니다.</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link href="/grading" className="btn primary">시험 관리</Link>
-            <Link href="/" className="btn ghost">메인으로</Link>
+            <button className="btn primary" onClick={() => openPopup("/grading", "yogibo_grading")}>시험 관리</button>
+            <button className="btn ghost" onClick={() => openPopup("/", "yogibo_main")}>메인으로</button>
           </div>
         </div>
 

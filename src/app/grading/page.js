@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
+import { openPopup } from "@/lib/popup";
 import { autoScore, finalScore, statusOf, scoreQuestion, normalize } from "@/lib/scoring";
 import { QUESTION_LABELS, QUESTION_SCORES, AUTO_QUESTION_IDS, PASS_SCORE } from "@/lib/examDefaults";
 
@@ -179,11 +180,13 @@ function GradingSettingsModal({ onClose }) {
           <p style={{ marginTop: 8 }}>페이지 이동과 비밀번호 관리를 여기서 처리합니다.</p>
         </div>
 
+        {/* 팝업 창으로 연다 — 보던 화면이 그대로 남아 다시 로그인할 필요가 없다 */}
         <div className="criteria-block">
-          <h3 style={{ fontSize: 15, marginBottom: 10 }}>페이지 이동</h3>
+          <h3 style={{ fontSize: 15, marginBottom: 6 }}>페이지 이동</h3>
+          <p className="subtle" style={{ marginBottom: 12 }}>팝업 창으로 열립니다. 지금 보던 화면은 그대로 유지됩니다.</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link href="/overall" className="btn primary">수습 종합평가</Link>
-            <Link href="/" className="btn ghost">메인으로</Link>
+            <button className="btn primary" onClick={() => openPopup("/overall", "yogibo_overall")}>수습 종합평가</button>
+            <button className="btn ghost" onClick={() => openPopup("/", "yogibo_main")}>메인으로</button>
           </div>
         </div>
 
