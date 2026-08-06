@@ -42,6 +42,7 @@ function OverallInner() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [months, setMonths] = useState([]); // 빈 배열 = 해당 연도 전체
   const [multiMonth, setMultiMonth] = useState(false);
+  const [range, setRange] = useState(null); // 상세검색(날짜 직접 지정)
 
   useEffect(() => {
     loadAll();
@@ -85,8 +86,8 @@ function OverallInner() {
 
   // 상단에서 고른 연/월(분기)에 등록된 대상자만 대시보드에 보여준다.
   const periodEmployees = useMemo(
-    () => employees.filter((e) => inPeriod(e.createdAt, year, months)),
-    [employees, year, months]
+    () => employees.filter((e) => inPeriod(e.createdAt, year, months, range)),
+    [employees, year, months, range]
   );
 
   async function addEmployee() {
@@ -226,9 +227,11 @@ function OverallInner() {
           onMonthsChange={setMonths}
           multi={multiMonth}
           onMultiChange={setMultiMonth}
+          range={range}
+          onRangeChange={setRange}
           right={
             <>
-              <Link href="/grading" className="btn ghost">시험 관리 →</Link>
+              <button className="btn ghost" onClick={loadAll}>{loading ? "불러오는 중..." : "새로고침"}</button>
               <button className="btn ghost" onClick={() => setModal("overall")}>평가 지침</button>
               <button className="icon-btn" onClick={() => setModal("settings")} title="설정 및 인쇄" aria-label="설정 및 인쇄">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -246,13 +249,8 @@ function OverallInner() {
               <h1>수습직원 종합 평가 대시보드</h1>
               <p>
                 인사카드 평가 · 매출 평가 · 역량평가를 하나의 기준으로 합산합니다.
-                <br />조회 기간: <b>{periodLabel(year, months)}</b> · 대상자 등록일 기준
+                <br />조회 기간: <b>{periodLabel(year, months, range)}</b> · 대상자 등록일 기준
               </p>
-            </div>
-            <div className="weight-pill">
-              <span className="pill">인사카드 <b>20%</b></span>
-              <span className="pill">매출 <b>50%</b></span>
-              <span className="pill">역량평가 <b>30%</b></span>
             </div>
           </section>
 
@@ -262,7 +260,6 @@ function OverallInner() {
             {[["overview", "0. 종합 대시보드"], ["hr", "1. 인사카드 평가"], ["sales", "2. 매출 평가"], ["competency", "3. 역량평가 연동"], ["settings", "4. 기준 및 데이터 관리"]].map(([k, label]) => (
               <button key={k} className={"tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
             ))}
-            <button className="btn ghost" style={{ marginLeft: "auto" }} onClick={loadAll}>{loading ? "불러오는 중..." : "새로고침"}</button>
           </nav>
 
           {tab === "overview" && (
@@ -358,9 +355,22 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
     setCheckedIds((prev) => prev.filter((id) => alive.has(id)));
   }, [employees]);
 
-  // 대상자 리스트와 선택 직원 종합 결과를 각각 가로 100%로 배치한다.
+  // 선택 직원 종합 결과를 위로, 대상자 리스트를 아래로. 각각 가로 100%.
   return (
     <div className="dashboard-stack">
+      {selected && (
+        <section className="card">
+          <div className="panel-title">
+            <div>
+              <h2>선택 직원 종합 결과</h2>
+              <p>가중치 반영 기준: 인사카드 20점 · 매출 50점 · 역량 30점</p>
+            </div>
+            <button className="btn ghost" onClick={() => setSelectedId(null)}>선택 해제</button>
+          </div>
+          <SummaryPanel emp={selected} exams={exams} answerKey={answerKey} setTab={setTab} />
+        </section>
+      )}
+
       <section className="card">
         <div className="panel-title">
           <div>
@@ -404,11 +414,12 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
                     title="현재 페이지 전체 선택"
                   />
                 </th>
+                <th style={{ width: 96 }}>구분</th>
                 <th>소속</th><th>이름 / 직급</th><th>인사카드</th><th>매출</th><th>역량</th><th>종합</th><th>상태</th><th>관리</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={9} className="empty-state">등록된 대상자가 없습니다.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={10} className="empty-state">등록된 대상자가 없습니다.</td></tr>}
               {rows.map((e) => {
                 const r = calculateTotal(e, exams, answerKey);
                 const c = completion(e, exams, answerKey);
@@ -422,13 +433,26 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
                         onChange={() => toggleOne(e.id)}
                       />
                     </td>
+                    {/* 구분: 3개 항목 입력이 끝나면 정규직 전환, 아니면 수습평가 */}
+                    <td>
+                      {c.done
+                        ? <span className="badge ok">정규직 전환</span>
+                        : <span className="badge gray">수습평가</span>}
+                    </td>
                     <td style={{ whiteSpace: "nowrap" }}>{e.store || "-"}</td>
                     <td><b>{e.name}</b><br /><span style={{ color: "#6b7280" }}>{e.role || "-"}</span></td>
                     <td>{r.hr.raw} / 100</td>
                     <td>{r.sales.excluded ? <span style={{ color: "#8b95a1" }}>제외</span> : `${fmtNum(r.sales.total, 0)} / 50`}</td>
                     <td>{fmtNum(r.comp.raw, 0)} / 100</td>
                     <td><b style={{ fontSize: 16 }}>{fmtNum(r.total, 1)}</b></td>
-                    <td>{c.done ? <span className="badge ok">정규직 전환</span> : <span className="badge warn">진행 중</span>}</td>
+                    {/* 상태: 입력 진행 상황 */}
+                    <td>
+                      {c.done
+                        ? <span className="badge ok">평가 완료</span>
+                        : <span className="badge warn">
+                            {[!c.hrDone && "인사카드", !c.salesDone && "매출", !c.compDone && "역량"].filter(Boolean).join("·")} 미입력
+                          </span>}
+                    </td>
                     <td onClick={(ev) => ev.stopPropagation()}>
                       <button className="btn danger" style={{ padding: "8px 11px", fontSize: 12 }} onClick={() => onDelete(e)}>삭제</button>
                     </td>
@@ -450,16 +474,6 @@ function OverviewTab({ employees, exams, answerKey, selectedId, setSelectedId, a
         )}
       </section>
 
-      <aside className="card">
-        <div className="panel-title">
-          <div>
-            <h2>선택 직원 종합 결과</h2>
-            <p>가중치 반영 기준: 인사카드 20점 · 매출 50점 · 역량 30점</p>
-          </div>
-        </div>
-        {!selected && <div className="empty-state">평가 대상자를 선택해 주세요.</div>}
-        {selected && <SummaryPanel emp={selected} exams={exams} answerKey={answerKey} setTab={setTab} />}
-      </aside>
     </div>
   );
 }
@@ -1102,7 +1116,15 @@ function SettingsModal({ onClose, selected, onPrint }) {
         <button className="btn ghost criteria-close" onClick={onClose}>닫기</button>
         <div style={{ paddingRight: 80, paddingBottom: 18, borderBottom: "1px solid #eaebee", marginBottom: 4 }}>
           <h2 style={{ fontSize: 22, margin: 0 }}>설정 및 인쇄</h2>
-          <p style={{ marginTop: 8 }}>평가표 인쇄와 비밀번호 관리를 여기서 처리합니다.</p>
+          <p style={{ marginTop: 8 }}>페이지 이동, 평가표 인쇄, 비밀번호 관리를 여기서 처리합니다.</p>
+        </div>
+
+        <div className="criteria-block">
+          <h3 style={{ fontSize: 15, marginBottom: 10 }}>페이지 이동</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/grading" className="btn primary">시험 관리</Link>
+            <Link href="/" className="btn ghost">메인으로</Link>
+          </div>
         </div>
 
         <div className="criteria-block">
@@ -1366,7 +1388,7 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
 
   if (mode === "hr") {
     return (
-      <section className="print-sheet">
+      <section className="print-sheet hq-print">
         <img className="print-brand" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" />
         <div className="print-title">인사카드 평가표</div>
         <p className="print-sub">{emp.name || "-"} · {emp.store || "-"} · {emp.role || "-"} · 평가기간 {emp.period || "-"}</p>
@@ -1392,7 +1414,7 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
     // 매출 평가 제외 대상은 점수표 대신 제외 사유와 근거를 남긴다.
     if (sales.excluded) {
       return (
-        <section className="print-sheet">
+        <section className="print-sheet hq-print">
           <div className="print-page">
             <img className="print-brand" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" />
             <div className="print-title">매출 평가표</div>
@@ -1435,7 +1457,7 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
       );
     }
     return (
-      <section className="print-sheet">
+      <section className="print-sheet hq-print">
         <div className="print-page">
           <img className="print-brand" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" />
           <div className="print-title">매출 평가표</div>
@@ -1465,7 +1487,7 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
   }
 
   return (
-    <section className="print-sheet">
+    <section className="print-sheet hq-print">
       <img className="print-brand" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" />
       <div className="print-title">수습직원 종합평가표</div>
       <p className="print-sub">
@@ -1479,9 +1501,13 @@ function PrintSheet({ mode, emp, exams, answerKey }) {
         <div className="meta-box"><div className="k">직급</div><div className="v">{emp.role || "-"}</div></div>
         <div className="meta-box"><div className="k">평가기간</div><div className="v">{emp.period || "-"}</div></div>
       </div>
-      <div className="score-hero">
-        <div><div className="label">종합평가 최종 점수</div><div className="value">{fmtNum(total.total, 1)}<small> / 100</small></div></div>
-        <div style={{ textAlign: "right", fontSize: 11, color: "#6b7280", lineHeight: 1.6, fontWeight: 800 }}>
+      {/* 수습평가(본사&물류) 평가표와 동일한 컬러 배너 */}
+      <div className="hq-print-hero">
+        <div>
+          <div className="k">종합평가 최종 점수</div>
+          <div className="v">{fmtNum(total.total, 1)}<small> / 100</small></div>
+        </div>
+        <div className="grade" style={{ fontSize: 11, lineHeight: 1.7 }}>
           {sales.excluded ? (
             <>인사카드 {fmtNum(hr.weighted * 2, 1)} / 40<br />매출 평가 제외<br />역량 {fmtNum(comp.weighted * 2, 1)} / 60</>
           ) : (

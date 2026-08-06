@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
 import DateTextInput from "@/components/DateTextInput";
+import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
 import { HQ_COMPANY, HQ_CATEGORIES, HQ_ITEMS, HQ_SCALE_LABELS, HQ_TOTAL_MAX, HQ_GRADE_CRITERIA, hqTotal, hqAnsweredCount, hqGrade } from "@/lib/hqForm";
 
 const LOGO = "https://www.yogico.kr/img/coMake2.png";
@@ -37,6 +38,21 @@ function HqInner() {
   const [saving, setSaving] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // 기간 필터 (평가일 기준, 없으면 작성일)
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [months, setMonths] = useState([]);
+  const [multiMonth, setMultiMonth] = useState(false);
+  const [range, setRange] = useState(null);
+  // 리스트 체크박스 선택 — 설정 팝업의 PDF 인쇄 활성화 조건으로도 쓰인다
+  const [checkedIds, setCheckedIds] = useState([]);
+
+  const parseEvalDate = (ev) => {
+    const s = String(ev.evalDate || "").replace(/\./g, "/").trim();
+    const m = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/.exec(s);
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(ev.createdAt);
+  };
+  const periodList = list.filter((ev) => inPeriod(parseEvalDate(ev), year, months, range));
 
   useEffect(() => {
     load();
@@ -126,10 +142,21 @@ function HqInner() {
   return (
     <>
       <div className="app-screen">
-        <div className="topbar no-print">
-          <div className="topbar-inner">
-            <div className="brand"><img className="brand-logo" src={LOGO} alt="Yogibo" /><div>{HQ_COMPANY} 수습 평가</div></div>
-            <div className="top-actions">
+        <PeriodBar
+          className="no-print"
+          title={`${HQ_COMPANY} 수습 평가`}
+          logo={LOGO}
+          year={year}
+          onYearChange={setYear}
+          months={months}
+          onMonthsChange={setMonths}
+          multi={multiMonth}
+          onMultiChange={setMultiMonth}
+          range={range}
+          onRangeChange={setRange}
+          right={
+            <>
+              <button className="btn ghost" onClick={load}>{loading ? "불러오는 중..." : "새로고침"}</button>
               <button className="btn ghost" onClick={() => setGuideOpen(true)}>평가 지침</button>
               {mode === "form" && <button className="btn ghost" onClick={() => setMode("list")}>← 목록으로</button>}
               {/* 인쇄·비밀번호는 톱니바퀴 설정 팝업으로 통합 */}
@@ -139,13 +166,18 @@ function HqInner() {
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         <main className="wrap">
           {mode === "list" && (
-            <ListView list={list} loading={loading} onNew={openNew} onEdit={openEdit} onDelete={removeEvaluation} onDeleteMany={removeEvaluation} onRefresh={load} />
+            <ListView
+              list={periodList} loading={loading} onNew={openNew} onEdit={openEdit}
+              onDelete={removeEvaluation} onDeleteMany={removeEvaluation} onRefresh={load}
+              periodText={periodLabel(year, months, range)}
+              checkedIds={checkedIds} setCheckedIds={setCheckedIds}
+            />
           )}
           {mode === "form" && (
             <FormView
@@ -161,9 +193,11 @@ function HqInner() {
         {settingsOpen && (
           <HqSettingsModal
             onClose={() => setSettingsOpen(false)}
-            canPrint={mode === "form"}
-            name={form.name}
-            onPrint={() => { setSettingsOpen(false); doPrint(); }}
+            mode={mode}
+            formName={form.name}
+            checked={list.filter((ev) => checkedIds.includes(ev.id))}
+            onPrintForm={() => { setSettingsOpen(false); doPrint(); }}
+            onPrintChecked={(ev) => { setSettingsOpen(false); openEdit(ev); setTimeout(doPrint, 400); }}
           />
         )}
       </div>
@@ -174,7 +208,10 @@ function HqInner() {
 }
 
 /* ─── 설정 및 인쇄 (톱니바퀴) ─── */
-function HqSettingsModal({ onClose, canPrint, name, onPrint }) {
+function HqSettingsModal({ onClose, mode, formName, checked, onPrintForm, onPrintChecked }) {
+  // 인쇄는 ① 평가표를 열어둔 경우 ② 리스트에서 체크박스로 고른 경우 모두 가능하다.
+  const canPrintForm = mode === "form";
+  const one = checked?.length === 1 ? checked[0] : null;
   return (
     <div className="criteria-modal no-print" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="criteria-panel" style={{ width: "min(500px, 100%)" }}>
@@ -186,12 +223,26 @@ function HqSettingsModal({ onClose, canPrint, name, onPrint }) {
 
         <div className="criteria-block">
           <h3 style={{ fontSize: 15, marginBottom: 6 }}>평가표 인쇄 (PDF 저장)</h3>
-          <p className="subtle" style={{ marginBottom: 12 }}>
-            {canPrint
-              ? <>현재 열려 있는 평가표: <b>{name || "(성명 미입력)"}</b></>
-              : "리스트에서 평가를 열면 해당 평가표를 인쇄할 수 있습니다."}
-          </p>
-          <button className="btn primary" disabled={!canPrint} onClick={onPrint}>평가표 인쇄</button>
+          {canPrintForm ? (
+            <>
+              <p className="subtle" style={{ marginBottom: 12 }}>현재 열려 있는 평가표: <b>{formName || "(성명 미입력)"}</b></p>
+              <button className="btn primary" onClick={onPrintForm}>평가표 인쇄</button>
+            </>
+          ) : one ? (
+            <>
+              <p className="subtle" style={{ marginBottom: 12 }}>선택한 대상자: <b>{one.name}</b>{one.dept ? ` · ${one.dept}` : ""}</p>
+              <button className="btn primary" onClick={() => onPrintChecked(one)}>평가표 인쇄</button>
+            </>
+          ) : (
+            <>
+              <p className="subtle" style={{ marginBottom: 12 }}>
+                {checked?.length > 1
+                  ? `${checked.length}명이 선택되어 있습니다. 인쇄는 한 번에 한 명만 가능하니 1명만 선택해 주세요.`
+                  : "리스트에서 대상자를 체크하거나 평가표를 열면 인쇄할 수 있습니다."}
+              </p>
+              <button className="btn primary" disabled>평가표 인쇄</button>
+            </>
+          )}
         </div>
 
         <div className="criteria-block">
@@ -205,7 +256,7 @@ function HqSettingsModal({ onClose, canPrint, name, onPrint }) {
 }
 
 /* ─── 평가 리스트: 저장된 평가의 결과만 표시 ─── */
-function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteMany, onRefresh }) {
+function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteMany, onRefresh, periodText, checkedIds, setCheckedIds }) {
   const [search, setSearch] = useState("");
   const [resultFilter, setResultFilter] = useState("");
 
@@ -234,8 +285,8 @@ function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteMany, onRefr
     };
   }, [list]);
 
-  // 선택 삭제용 체크박스 — 목록이 바뀌면 사라진 항목은 자동으로 정리한다.
-  const [checkedIds, setCheckedIds] = useState([]);
+  // 선택 상태는 상위에서 관리한다 (설정 팝업의 PDF 인쇄 활성화 조건으로도 쓰임).
+  // 목록이 바뀌면 사라진 항목은 자동으로 정리한다.
   const rowIds = rows.map((ev) => ev.id);
   const allChecked = rowIds.length > 0 && rowIds.every((id) => checkedIds.includes(id));
   const toggleOne = (id) =>
@@ -253,7 +304,10 @@ function ListView({ list, loading, onNew, onEdit, onDelete, onDeleteMany, onRefr
           평가 기준은 상단 '평가 지침'에서 확인한다. */}
       <section>
         <h1>{HQ_COMPANY} 수습기간 평가표</h1>
-        <p>본사&물류 수습직원의 수습기간 평가를 리스트로 관리합니다. 항목을 선택하면 상세 평가표를 확인·수정할 수 있습니다.</p>
+        <p>
+          본사&물류 수습직원의 수습기간 평가를 리스트로 관리합니다. 항목을 선택하면 상세 평가표를 확인·수정할 수 있습니다.
+          <br />조회 기간: <b>{periodText}</b> · 평가일 기준
+        </p>
       </section>
 
       <section className="kpis" style={{ gridTemplateColumns: "repeat(4, minmax(0,1fr))" }}>

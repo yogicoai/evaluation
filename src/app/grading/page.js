@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import EvaluatorGate, { PasswordManageButton } from "@/components/EvaluatorGate";
+import PeriodBar, { inPeriod, periodLabel } from "@/components/PeriodBar";
 import { autoScore, finalScore, statusOf, scoreQuestion, normalize } from "@/lib/scoring";
 import { QUESTION_LABELS, QUESTION_SCORES, AUTO_QUESTION_IDS, PASS_SCORE } from "@/lib/examDefaults";
 
@@ -43,6 +44,13 @@ function GradingInner() {
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
+
+  // 기간 필터 (제출일 기준)
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [months, setMonths] = useState([]);
+  const [multiMonth, setMultiMonth] = useState(false);
+  const [range, setRange] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     refresh();
@@ -85,27 +93,44 @@ function GradingInner() {
 
   const answerKey = config?.answerKey || {};
   const questions = config?.questions || [];
+  // 선택한 기간(제출일 기준)으로 거른 목록
+  const periodSubmissions = submissions.filter((s) => inPeriod(s.submittedAt, year, months, range));
   const selected = submissions.find((s) => s.submissionId === selectedId) || null;
 
   return (
     <>
-      <div className="topbar">
-        <div className="topbar-inner">
-          <div className="brand"><img className="brand-logo" src="https://yogibo.kr/web/img/icon/logo3_on.png" alt="Yogibo" /><div>수습평가시험 관리</div></div>
-          <div className="top-actions">
-            <Link href="/" className="btn ghost">홈</Link>
-            <Link href="/overall" className="btn ghost">수습 종합평가 →</Link>
-{/* CSV 다운로드는 데이터 반출 방지를 위해 숨김 처리 (exportCSV 함수는 보존) */}
+      {/* 상단: 연도 · 월 · 분기 기간 선택 + 새로고침 + 설정(톱니바퀴) */}
+      <PeriodBar
+        title="수습평가시험 관리"
+        logo="https://yogibo.kr/web/img/icon/logo3_on.png"
+        year={year}
+        onYearChange={setYear}
+        months={months}
+        onMonthsChange={setMonths}
+        multi={multiMonth}
+        onMultiChange={setMultiMonth}
+        range={range}
+        onRangeChange={setRange}
+        right={
+          <>
             <button className="btn ghost" onClick={refresh}>{loading ? "불러오는 중..." : "새로고침"}</button>
-            <PasswordManageButton scope="store" scopeLabel="매장" />
-          </div>
-        </div>
-      </div>
+            <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="설정" aria-label="설정">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+          </>
+        }
+      />
 
       <main className="wrap">
         <section className="card">
           <h1>요기보 직원 역량평가 결과</h1>
-          <p>1~24번은 자동채점, 25번 서술형은 평가자가 0~4점으로 수동 채점합니다. 22~24번 단답/약자 문항은 띄어쓰기를 제거한 뒤 정답 여부를 비교합니다.</p>
+          <p>
+            1~24번은 자동채점, 25번 서술형은 평가자가 0~4점으로 수동 채점합니다.
+            <br />조회 기간: <b>{periodLabel(year, months, range)}</b> · 제출일 기준
+          </p>
           <div className="tabs">
             {[["dashboard", "대시보드"], ["analysis", "문항 분석"], ["examEdit", "시험지 편집"], ["key", "정답 한눈에 보기"]].map(([k, label]) => (
               <button key={k} className={"tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
@@ -121,7 +146,7 @@ function GradingInner() {
 
         {tab === "dashboard" && config && (
           <DashboardTab
-            submissions={submissions}
+            submissions={periodSubmissions}
             answerKey={answerKey}
             questions={questions}
             onDelete={removeSubmissions}
@@ -131,13 +156,44 @@ function GradingInner() {
             onSaved={refresh}
           />
         )}
-        {tab === "analysis" && config && <AnalysisTab submissions={submissions} answerKey={answerKey} />}
+        {tab === "analysis" && config && <AnalysisTab submissions={periodSubmissions} answerKey={answerKey} />}
         {tab === "examEdit" && config && (
           <ExamEditTab questions={questions} answerKey={answerKey} onSaved={refresh} />
         )}
         {tab === "key" && config && <KeyTab answerKey={answerKey} />}
       </main>
+
+      {settingsOpen && <GradingSettingsModal onClose={() => setSettingsOpen(false)} />}
     </>
+  );
+}
+
+/* ─── 설정 (톱니바퀴) — 페이지 이동 · 비밀번호 관리 ─── */
+function GradingSettingsModal({ onClose }) {
+  return (
+    <div className="criteria-modal no-print" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="criteria-panel" style={{ width: "min(500px, 100%)" }}>
+        <button className="btn ghost criteria-close" onClick={onClose}>닫기</button>
+        <div style={{ paddingRight: 80, paddingBottom: 18, borderBottom: "1px solid #eaebee", marginBottom: 4 }}>
+          <h2 style={{ fontSize: 22, margin: 0 }}>설정</h2>
+          <p style={{ marginTop: 8 }}>페이지 이동과 비밀번호 관리를 여기서 처리합니다.</p>
+        </div>
+
+        <div className="criteria-block">
+          <h3 style={{ fontSize: 15, marginBottom: 10 }}>페이지 이동</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/overall" className="btn primary">수습 종합평가</Link>
+            <Link href="/" className="btn ghost">메인으로</Link>
+          </div>
+        </div>
+
+        <div className="criteria-block">
+          <h3 style={{ fontSize: 15, marginBottom: 6 }}>보안</h3>
+          <p className="subtle" style={{ marginBottom: 12 }}>매장 평가 페이지의 접속 비밀번호를 변경합니다.</p>
+          <PasswordManageButton scope="store" scopeLabel="매장" />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -296,44 +352,24 @@ function DashboardTab({ submissions, answerKey, questions, selectedId, setSelect
         <Pagination page={currentPage} totalPages={totalPages} onPage={setPage} />
       </section>
 
-      <div className="dashboard-bottom">
-        <section className="card">
-          <div className="detail-head">
-            <div>
-              <h2>응시자 상세</h2>
-              <p>응시자 리스트에서 한 명을 선택하면 답안·자동채점·서술형 채점을 확인할 수 있습니다.</p>
-            </div>
+      {/* 매장별 요약 배너는 제거하고 응시자 상세만 전체 폭으로 둔다 */}
+      <section className="card" style={{ marginTop: 16 }}>
+        <div className="detail-head">
+          <div>
+            <h2>응시자 상세</h2>
+            <p>응시자 리스트에서 한 명을 선택하면 답안·자동채점·서술형 채점을 확인할 수 있습니다.</p>
           </div>
-          {!selected && <div className="badge gray">선택된 응시자 없음</div>}
-          {selected && (
-            <SubmissionDetail
-              record={selected}
-              answerKey={answerKey}
-              questions={questions}
-              onSaved={onSaved}
-            />
-          )}
-        </section>
-
-        <section className="card">
-          <h2>매장별 요약</h2>
-          <div className="store-grid">
-            {storeSummary.length === 0 && <p>데이터 없음</p>}
-            {storeSummary.map(([s, arr]) => {
-              const avg = Math.round(arr.reduce((t, r) => t + finalScore(r, answerKey), 0) / arr.length);
-              const pending = arr.filter((r) => statusOf(r, answerKey) === "pending").length;
-              return (
-                <div key={s} className="store-row">
-                  <div><b>{s}</b><div className="barline" style={{ marginTop: 8 }}><span style={{ width: `${avg}%` }} /></div></div>
-                  <div><span className="badge blue">{arr.length}명</span></div>
-                  <div><b>{avg}점</b></div>
-                  <div>{pending ? <span className="badge warn">미채점 {pending}</span> : <span className="badge ok">완료</span>}</div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
+        </div>
+        {!selected && <div className="badge gray">선택된 응시자 없음</div>}
+        {selected && (
+          <SubmissionDetail
+            record={selected}
+            answerKey={answerKey}
+            questions={questions}
+            onSaved={onSaved}
+          />
+        )}
+      </section>
     </>
   );
 }

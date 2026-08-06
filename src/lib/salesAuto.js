@@ -2,7 +2,7 @@
 // 오프라인 서버의 직원 명단 + 기간 주문 데이터를 집계해
 // 기존 엑셀 양식과 동일한 구조의 rows(rawStoreTable / rawPersonalTable)를 생성한다.
 // → 이후 채점(extractSales)·화면 표시·인쇄는 엑셀 업로드와 완전히 동일한 경로를 탄다.
-import { fetchActiveManagers, fetchOrders, strip, shortName, safeNum, ROLE_PRIORITY } from "./staff.js";
+import { fetchManagers, fetchOrders, strip, shortName, safeNum, ROLE_PRIORITY } from "./staff.js";
 
 // 상대평가 대상 직영 직급 (중간관리 매장 / 일급제 / 서포터 제외)
 const DIRECT_ROLES = ["매니저", "부매니저", "시니어"];
@@ -30,12 +30,15 @@ function dedupeStaff(managers) {
 }
 
 export async function buildSalesData({ name, store, startDate, endDate }) {
-  const [managersRaw, orders] = await Promise.all([fetchActiveManagers(), fetchOrders(startDate, endDate)]);
+  // 매출은 "그 기간에 일한 사람" 기준이어야 하므로 퇴사자까지 포함한 전체 명단을 쓴다.
+  // (활성 직원만 쓰면 기간 중 퇴사한 직원의 매출이 통째로 빠져 모집단·순위가 왜곡된다)
+  const [managersRaw, orders] = await Promise.all([fetchManagers(), fetchOrders(startDate, endDate)]);
   const staff = dedupeStaff(managersRaw);
+  const activeStaff = staff.filter((m) => m.isActive !== false);
 
-  // ── 중간관리 매장 판정: 활성 직원 중 중간관리 직급 또는 위탁(consignment=Y)이 있는 매장 ──
+  // ── 중간관리 매장 판정: 매장의 '현재' 성격이므로 활성 직원 기준으로 본다 ──
   const byStore = new Map();
-  staff.forEach((m) => {
+  activeStaff.forEach((m) => {
     const k = strip(m.storeName);
     if (!byStore.has(k)) byStore.set(k, []);
     byStore.get(k).push(m);
@@ -49,14 +52,34 @@ export async function buildSalesData({ name, store, startDate, endDate }) {
   const storeOrders = orders.filter((o) => storeMatch(o.store, store));
   const storeTotal = storeOrders.reduce((s, o) => s + safeNum(o.amount), 0);
 
-  // 매장 근무자 컬럼: 해당 매장 활성 직원 (직급순) + 대상자 미등록 시 추가
-  const storeStaff = staff
+  // 매장 근무자 컬럼 =
+  //   ① 해당 매장 현재 직원(매출 0이어도 표시)
+  //   ② 기간 내 이 매장에서 매출이 발생한 모든 담당자 — 퇴사자·명단에 없는 담당자 포함
+  //   ③ 평가 대상자
+  // ②를 넣지 않으면 열 합계가 매장 총매출과 어긋난다.
+  const roleByName = new Map(staff.map((m) => [strip(m.managerName), String(m.role || "").trim()]));
+  const labelByName = new Map(staff.map((m) => [strip(m.managerName), String(m.managerName).trim()]));
+
+  const colMap = new Map(); // nameStrip → {name, role}
+  const addCol = (rawName, role) => {
+    const key = strip(rawName);
+    if (!key || colMap.has(key)) return;
+    colMap.set(key, { name: String(rawName).trim(), role: role ?? roleByName.get(key) ?? "" });
+  };
+  activeStaff
     .filter((m) => storeMatch(m.storeName, store))
-    .sort((a, b) => (ROLE_PRIORITY[String(a.role || "").trim()] || 99) - (ROLE_PRIORITY[String(b.role || "").trim()] || 99) || String(a.managerName).localeCompare(String(b.managerName), "ko"));
-  const cols = storeStaff.map((m) => ({ name: String(m.managerName).trim(), role: String(m.role || "").trim() }));
-  if (!cols.some((c) => strip(c.name) === strip(name))) {
-    cols.push({ name: String(name).trim(), role: "수습" });
-  }
+    .forEach((m) => addCol(m.managerName, String(m.role || "").trim()));
+  storeOrders.forEach((o) => {
+    const n = shortName(o.manager);
+    if (n) addCol(labelByName.get(strip(n)) || n);
+  });
+  addCol(name, roleByName.get(strip(name)) || "수습");
+
+  const cols = [...colMap.values()].sort(
+    (a, b) =>
+      (ROLE_PRIORITY[a.role] || 99) - (ROLE_PRIORITY[b.role] || 99) ||
+      String(a.name).localeCompare(String(b.name), "ko")
+  );
   const colLabel = (c) => (c.role ? `${c.name} ${c.role}` : c.name);
 
   // 월별 × 직원별 매출
